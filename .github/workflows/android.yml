@@ -47,6 +47,16 @@ jobs:
         run: npm run build
 
       # 7. Synchronize Capacitor with Android
+      - name: Verify Node.js before Capacitor
+        run: |
+          echo "Node location:"
+          which node
+          echo "Node version:"
+          node --version
+          echo "NPM version:"
+          npm --version
+          node -e "console.log('Node runtime:', process.version)"
+
       - name: Sync Capacitor
         run: npx cap sync android
 
@@ -65,3 +75,17 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+
+      - name: Verify Node.js before Capacitor
+        run: |
+          echo "Node location:"
+          which node
+          echo "Node version:"
+          node --version
+          echo "NPM version:"
+          npm --version
+          node -e "console.log('Node runtime:', process.version)"
+
+      - name: Sync Capacitor
+        run: npx cap sync android
