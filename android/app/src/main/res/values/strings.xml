@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AuraCycle</string>
+    <string name="title_activity_main">AuraCycle</string>
+    <string name="package_name">com.local.auracycle</string>
+    <string name="custom_url_scheme">com.local.auracycle</string>
+</resources>
