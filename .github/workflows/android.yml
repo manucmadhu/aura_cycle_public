@@ -47,6 +47,17 @@ jobs:
 
       - name: Build React app
         run: npm run build
+        
+      - name: Diagnose Node.js
+        run: |
+          echo "========== NODE VERSION =========="
+          node --version
+          echo "========== NODE LOCATION =========="
+          which node
+          echo "========== NODE EXECUTABLE =========="
+          node -p "process.execPath"
+          echo "========== NPM VERSION =========="
+          npm --version
 
       - name: Sync Capacitor
         run: |
