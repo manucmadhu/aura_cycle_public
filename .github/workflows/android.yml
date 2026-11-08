@@ -9,65 +9,56 @@ on:
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Get project source code
       - name: Checkout project
         uses: actions/checkout@v4
 
-      # 2. Install Node.js 22
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          node-version: '22.16.0'
 
-      # 3. Verify Node.js and npm versions
-      - name: Verify Node.js version
+      - name: Verify Node.js
         run: |
+          echo "Node path:"
+          which node
+          echo "Node version:"
           node --version
-          npm --version
+          echo "Node runtime:"
+          node -p "process.version"
           node -e "if (Number(process.versions.node.split('.')[0]) < 22) process.exit(1)"
 
-      # 4. Install Java 21
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
 
-      # 5. Install project dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 6. Build React application
+      - name: Verify Node.js after npm install
+        run: |
+          which node
+          node --version
+          node -p "process.execPath"
+
       - name: Build React app
         run: npm run build
 
-      # 7. Synchronize Capacitor with Android
-      - name: Verify Node.js before Capacitor
-        run: |
-          echo "Node location:"
-          which node
-          echo "Node version:"
-          node --version
-          echo "NPM version:"
-          npm --version
-          node -e "console.log('Node runtime:', process.version)"
-
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: |
+          node --version
+          npx --no-install cap sync android
 
-      # 8. Build Android debug APK
       - name: Build Android APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # 9. Upload APK as GitHub artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
@@ -75,17 +66,3 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
-
-
-      - name: Verify Node.js before Capacitor
-        run: |
-          echo "Node location:"
-          which node
-          echo "Node version:"
-          node --version
-          echo "NPM version:"
-          npm --version
-          node -e "console.log('Node runtime:', process.version)"
-
-      - name: Sync Capacitor
-        run: npx cap sync android
