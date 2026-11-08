@@ -79,64 +79,114 @@ const formatDisplayDate = (dateStr, options = { month: 'short', day: 'numeric' }
 const getTodayStr = () => formatDate(new Date());
 
 // ============================================================================
-// DEFAULT SAMPLE DATA GENERATOR (Realistic 5-Cycle History for Instant Demo)
+// DEFAULT SAMPLE DATA GENERATOR (Multi-Month & Previous Year History for Demo)
 // ============================================================================
 const generateSampleData = () => {
   const today = getTodayStr();
-  // Create 5 realistic cycles leading up to current cycle (currently on Day 11 of cycle)
-  const c5Start = addDays(today, -10); // Current cycle started 10 days ago (Day 11 today)
-  const c4Start = addDays(c5Start, -29); // 29-day cycle
-  const c3Start = addDays(c4Start, -28); // 28-day cycle
-  const c2Start = addDays(c3Start, -30); // 30-day cycle
-  const c1Start = addDays(c2Start, -28); // 28-day cycle
+  // Generate 12 realistic cycles spanning ~1 year (including previous year dates)
+  // Latest cycle started 10 days ago (currently Cycle Day 11)
+  const cycleLengths = [28, 29, 28, 30, 27, 29, 28, 28, 30, 29, 28];
+  const starts = [];
+  let cursor = addDays(today, -10);
+  starts.unshift(cursor);
 
-  const starts = [c1Start, c2Start, c3Start, c4Start, c5Start];
+  for (let i = 0; i < cycleLengths.length; i++) {
+    cursor = addDays(cursor, -cycleLengths[i]);
+    starts.unshift(cursor);
+  }
+
   const logs = {};
 
   starts.forEach((start, idx) => {
     const duration = idx % 2 === 0 ? 5 : 4;
+    const cLen = cycleLengths[idx] || 28;
+    const ovOffset = cLen - 14;
+
+    // 1. Log Menstrual Phase days (CD 1 .. duration)
     for (let i = 0; i < duration; i++) {
       const d = addDays(start, i);
+      if (diffDays(d, today) > 0) continue;
       const flows = ['medium', 'heavy', 'medium', 'light', 'spotting'];
       logs[d] = {
         date: d,
         flow: flows[i] || 'light',
         pain: i < 2 ? 'moderate' : i === 2 ? 'mild' : 'none',
-        mood: i === 0 ? ['Fatigued', 'Sensitive'] : ['Calm'],
-        symptoms: i < 2 ? ['Cramps', 'Lower Backache', 'Bloating'] : ['Fatigue'],
+        mood: i === 0 ? ['Fatigued', 'Sensitive'] : i === 1 ? ['Sensitive', 'Calm'] : ['Calm'],
+        symptoms:
+          i === 0
+            ? ['Cramps', 'Lower Backache', 'Fatigue', 'Food Cravings']
+            : i === 1
+              ? ['Cramps', 'Bloating', 'Fatigue']
+              : ['Fatigue'],
         mucus: 'none',
-        bbt: (36.25 + Math.random() * 0.15).toFixed(2),
-        notes: i === 0 ? 'Cycle started in the morning. Took magnesium.' : ''
+        water: 8,
+        bbt: (36.24 + Math.random() * 0.14).toFixed(2),
+        notes: i === 0 ? 'Cycle started. Had warm water and dark chocolate.' : ''
       };
     }
 
-    // Add mid-cycle ovulation logs & BBT shift for past cycles
-    for (let dayOffset = duration; dayOffset < 28; dayOffset++) {
+    // 2. Log Follicular, Ovulatory & Luteal days across historical cycles
+    for (let dayOffset = duration; dayOffset < cLen; dayOffset++) {
       const d = addDays(start, dayOffset);
-      if (diffDays(d, today) > 0) continue; // Don't log future dates
+      if (diffDays(d, today) > 0) continue;
 
-      const isFollicular = dayOffset < 14;
-      const isOvulation = dayOffset >= 12 && dayOffset <= 15;
-      const isPMS = dayOffset >= 24;
+      const isFollicular = dayOffset >= duration && dayOffset < ovOffset - 2;
+      const isOvulation = dayOffset >= ovOffset - 2 && dayOffset <= ovOffset + 1;
+      const isLateLuteal = dayOffset >= cLen - 4; // PMS window (3-4 days before next period)
 
-      const baseBbt = isFollicular ? 36.32 : 36.68;
-      const randomVar = (Math.random() * 0.12 - 0.06);
-      const bbtVal = (baseBbt + randomVar).toFixed(2);
+      const baseBbt = dayOffset < ovOffset ? 36.31 : 36.67;
+      const bbtVal = (baseBbt + (Math.random() * 0.12 - 0.06)).toFixed(2);
 
-      if (isOvulation || isPMS || dayOffset % 3 === 0) {
+      if (isOvulation) {
         logs[d] = {
           date: d,
           flow: null,
-          pain: dayOffset === 14 ? 'ovulation_twinge' : 'none',
-          mood: isOvulation ? ['Energetic', 'Happy'] : isPMS ? ['Irritable', 'Anxious'] : ['Balanced'],
-          symptoms: isOvulation
-            ? ['High Energy', 'Increased Libido']
-            : isPMS
-              ? ['Breast Tenderness', 'Bloating', 'Food Cravings']
-              : [],
-          mucus: dayOffset === 13 || dayOffset === 14 ? 'eggwhite' : dayOffset === 11 || dayOffset === 12 ? 'watery' : isPMS ? 'dry' : 'creamy',
+          pain: dayOffset === ovOffset ? 'ovulation_twinge' : 'none',
+          mood: ['Energetic', 'Happy'],
+          symptoms:
+            dayOffset === ovOffset
+              ? ['High Energy', 'Increased Libido']
+              : ['High Energy'],
+          mucus: dayOffset === ovOffset || dayOffset === ovOffset - 1 ? 'eggwhite' : 'watery',
+          water: 7,
           bbt: bbtVal,
-          notes: dayOffset === 14 ? 'Clear thermal shift & egg-white CM noticed.' : ''
+          notes: dayOffset === ovOffset ? 'Clear thermal shift & peak fertility signs.' : ''
+        };
+      } else if (isLateLuteal) {
+        logs[d] = {
+          date: d,
+          flow: null,
+          pain: 'mild',
+          mood: ['Sensitive', 'Irritable'],
+          symptoms: ['Food Cravings', 'Bloating', 'Breast Tenderness', 'Fatigue'],
+          mucus: 'dry',
+          water: 6,
+          bbt: bbtVal,
+          notes: 'PMS chocolate cravings and mild bloating.'
+        };
+      } else if (isFollicular && dayOffset % 3 === 0) {
+        logs[d] = {
+          date: d,
+          flow: null,
+          pain: 'none',
+          mood: ['Balanced', 'Energetic'],
+          symptoms: ['High Energy', 'Workout'],
+          mucus: 'creamy',
+          water: 8,
+          bbt: bbtVal,
+          notes: ''
+        };
+      } else if (dayOffset % 4 === 0) {
+        logs[d] = {
+          date: d,
+          flow: null,
+          pain: 'none',
+          mood: ['Calm'],
+          symptoms: [],
+          mucus: 'creamy',
+          water: 7,
+          bbt: bbtVal,
+          notes: ''
         };
       }
     }
@@ -156,7 +206,7 @@ const DEFAULT_SETTINGS = {
   pinCode: null, // null or 4-digit string
   userName: 'Nechu',
   periodCareMessage:
-    "Dear Nechu, I know you're having a hard time. Hydrate and have your favorite chocolates.",
+    "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates.",
   customSymptoms: [
     'Cramps',
     'Lower Backache',
@@ -187,12 +237,12 @@ const DEFAULT_SETTINGS = {
 };
 
 // ============================================================================
-// CORE CYCLE ENGINE (Adaptive Weighted Moving Average + Luteal Calibration)
+// CORE CYCLE, PHASE & SYMPTOM PREDICTION ENGINE
 // ============================================================================
 function analyzeCycleData(logs, settings) {
   const today = getTodayStr();
 
-  // 1. Find all dates with actual period flow (excluding 'spotting' unless adjacent to flow, or treat light/medium/heavy as true period)
+  // 1. Find all dates with actual period flow (excluding 'spotting' unless part of period)
   const periodDates = Object.keys(logs)
     .filter((date) => {
       const f = logs[date]?.flow;
@@ -217,7 +267,7 @@ function analyzeCycleData(logs, settings) {
     }
   });
 
-  // 2. Calculate historical cycles from episodes
+  // 2. Calculate historical cycles from episodes (including previous years)
   const cycles = [];
   for (let i = 0; i < episodes.length; i++) {
     const current = episodes[i];
@@ -231,22 +281,23 @@ function analyzeCycleData(logs, settings) {
         periodEndDate: current.endDate,
         cycleLength,
         periodLength,
+        year: parseDate(current.startDate).getFullYear(),
         isOutlier: cycleLength < 21 || cycleLength > 45
       });
     } else {
-      // Ongoing/Latest cycle
       cycles.push({
         startDate: current.startDate,
         endDate: null,
         periodEndDate: current.endDate,
         cycleLength: null,
         periodLength,
+        year: parseDate(current.startDate).getFullYear(),
         isCurrent: true
       });
     }
   }
 
-  // 3. Calculate Predicted Cycle Length & Period Duration
+  // 3. Calculate Predicted Cycle Length & Period Duration using Weighted Moving Average
   const completedCycles = cycles.filter((c) => c.cycleLength !== null);
   const validCycles = settings.outlierFilter
     ? completedCycles.filter((c) => !c.isOutlier)
@@ -257,20 +308,24 @@ function analyzeCycleData(logs, settings) {
   let stdDev = 1.5;
 
   if (settings.calculationMode === 'smart' && validCycles.length > 0) {
-    // Weighted Moving Average of up to last 6 cycles (more recent cycles get higher weight: 1, 2, 3, 4, 5, 6)
-    const recent = validCycles.slice(-6);
+    // Incorporate up to last 12 cycles from previous year(s), giving stronger weight to recent ones
+    const recent = validCycles.slice(-12);
     let weightedSum = 0;
     let weightTotal = 0;
     recent.forEach((c, idx) => {
+      // Exponential/Linear hybrid weight favoring recent cycles while respecting baseline history
       const weight = idx + 1;
       weightedSum += c.cycleLength * weight;
       weightTotal += weight;
     });
     expectedCycleLength = Math.round(weightedSum / weightTotal);
 
-    // Period length average
-    const pSum = recent.reduce((acc, c) => acc + c.periodLength, 0);
-    expectedPeriodLength = Math.max(2, Math.min(10, Math.round(pSum / recent.length)));
+    // Period length weighted average
+    let pWeightedSum = 0;
+    recent.forEach((c, idx) => {
+      pWeightedSum += c.periodLength * (idx + 1);
+    });
+    expectedPeriodLength = Math.max(2, Math.min(10, Math.round(pWeightedSum / weightTotal)));
 
     // Standard deviation for confidence window
     if (recent.length >= 2) {
@@ -282,7 +337,7 @@ function analyzeCycleData(logs, settings) {
       stdDev = 2.0;
     }
   } else if (completedCycles.length > 0) {
-    const recent = completedCycles.slice(-6);
+    const recent = completedCycles.slice(-12);
     const mean = recent.reduce((acc, c) => acc + c.cycleLength, 0) / recent.length;
     const variance =
       recent.reduce((acc, c) => acc + Math.pow(c.cycleLength - mean, 2), 0) / recent.length;
@@ -290,9 +345,19 @@ function analyzeCycleData(logs, settings) {
   }
 
   const lutealLength = Number(settings.lutealPhaseLength) || 14;
+  const ovDayInCycle = Math.max(8, expectedCycleLength - lutealLength);
   const latestEpisode = episodes.length > 0 ? episodes[episodes.length - 1] : null;
 
-  // 4. Current Cycle State & Future Projections (Next 3 cycles)
+  // Helper to determine phase for any cycle day (1 .. expectedCycleLength)
+  const getPhaseForCycleDay = (cd, isFlowLogged = false) => {
+    if (isFlowLogged || (cd >= 1 && cd <= expectedPeriodLength)) return 'Menstrual';
+    if (cd >= ovDayInCycle - 2 && cd <= ovDayInCycle + 1) return 'Ovulatory';
+    if (cd > expectedPeriodLength && cd < ovDayInCycle - 2) return 'Follicular';
+    if (cd > ovDayInCycle + 1) return 'Luteal';
+    return 'Follicular';
+  };
+
+  // 4. Current Cycle State & Future Projections (Next 6 cycles)
   const predictedCycles = [];
   let currentCycleDay = null;
   let nextPeriodStart = null;
@@ -306,12 +371,11 @@ function analyzeCycleData(logs, settings) {
     currentCycleDay = diffDays(today, latestEpisode.startDate) + 1;
     let baseStart = latestEpisode.startDate;
 
-    // Project 4 cycles forward from the latest logged period start
-    for (let c = 0; c < 4; c++) {
+    // Project 7 cycles forward (index 0 = current cycle, index 1..6 = next 6 upcoming cycles)
+    for (let c = 0; c < 7; c++) {
       const cycleStart = addDays(baseStart, c * expectedCycleLength);
       const nextStart = addDays(baseStart, (c + 1) * expectedCycleLength);
       const periodEnd = addDays(cycleStart, expectedPeriodLength - 1);
-      // Ovulation happens `lutealLength` days before the NEXT period start
       const ovulationDate = addDays(nextStart, -lutealLength);
       const fertileStart = addDays(ovulationDate, -5);
       const fertileEnd = addDays(ovulationDate, 1);
@@ -334,47 +398,173 @@ function analyzeCycleData(logs, settings) {
     fertileWindowEnd = activePred.fertileEnd;
     daysUntilNextPeriod = diffDays(nextPeriodStart, today);
 
-    // Determine exact physiological phase today
     const todayLog = logs[today];
     const isCurrentlyBleeding =
-      (todayLog?.flow && todayLog.flow !== 'none' && todayLog.flow !== 'spotting') ||
+      Boolean(todayLog?.flow && todayLog.flow !== 'none' && todayLog.flow !== 'spotting') ||
       (currentCycleDay >= 1 && currentCycleDay <= expectedPeriodLength && currentCycleDay <= 7);
 
-    const ovDayInCycle = expectedCycleLength - lutealLength;
-
-    if (isCurrentlyBleeding) {
-      currentPhase = 'Menstrual';
-    } else if (currentCycleDay >= ovDayInCycle - 2 && currentCycleDay <= ovDayInCycle + 1) {
-      currentPhase = 'Ovulatory';
-    } else if (currentCycleDay > 0 && currentCycleDay < ovDayInCycle - 2) {
-      currentPhase = 'Follicular';
-    } else if (currentCycleDay > ovDayInCycle + 1) {
-      currentPhase = 'Luteal';
-    }
+    currentPhase = getPhaseForCycleDay(currentCycleDay, isCurrentlyBleeding);
   }
 
-  // 5. Build Lookup Sets for Fast Calendar Rendering
+  // 5. Build Lookup Sets for Fast Calendar Rendering (Past + Future 6 Cycles)
   const calendarMarkers = {};
   predictedCycles.forEach((pc, idx) => {
-    // Only mark predicted period for future cycles (idx >= 1) or remaining days of current period
     if (idx >= 1) {
       for (let i = 0; i < expectedPeriodLength; i++) {
         const d = addDays(pc.cycleStart, i);
-        calendarMarkers[d] = { ...calendarMarkers[d], isPredictedPeriod: true };
+        calendarMarkers[d] = { ...calendarMarkers[d], isPredictedPeriod: true, phase: 'Menstrual' };
       }
     }
-    // Mark fertile window & ovulation
     for (let i = -5; i <= 1; i++) {
       const d = addDays(pc.ovulationDate, i);
       calendarMarkers[d] = {
         ...calendarMarkers[d],
         isFertile: true,
-        isOvulation: i === 0
+        isOvulation: i === 0,
+        phase: 'Ovulatory'
       };
     }
   });
 
-  // 6. Summary Statistics
+  // 6. SYMPTOM & MOOD PATTERN PREDICTION ENGINE
+  // Map every historical log to its Cycle Day (CD) and Phase to compute probabilities
+  const phaseOccurrences = {
+    Menstrual: { totalDays: 0, items: {} },
+    Follicular: { totalDays: 0, items: {} },
+    Ovulatory: { totalDays: 0, items: {} },
+    Luteal: { totalDays: 0, items: {} }
+  };
+
+  // Also track by 3-day sliding Cycle Day window (CD - 1, CD, CD + 1) across completed/active cycles
+  const cycleDayWindowCounts = {}; // dayNum -> { cyclesObserved: Set, itemCounts: { [name]: Set(cycleIdx) } }
+  const totalCyclesWithLogs = Math.max(1, cycles.length);
+
+  cycles.forEach((cyc, cIdx) => {
+    const cLen = cyc.cycleLength || expectedCycleLength;
+    const cOvDay = Math.max(8, cLen - lutealLength);
+
+    for (let offset = 0; offset < cLen; offset++) {
+      const d = addDays(cyc.startDate, offset);
+      const entry = logs[d];
+      if (!entry) continue;
+
+      const cd = offset + 1;
+      let phaseName = 'Follicular';
+      if (offset < cyc.periodLength || (entry.flow && entry.flow !== 'none')) {
+        phaseName = 'Menstrual';
+      } else if (cd >= cOvDay - 2 && cd <= cOvDay + 1) {
+        phaseName = 'Ovulatory';
+      } else if (cd > cOvDay + 1) {
+        phaseName = 'Luteal';
+      }
+
+      const combinedTags = [
+        ...(entry.symptoms || []).map((s) => ({ name: s, type: 'symptom' })),
+        ...(entry.mood || []).map((m) => ({ name: m, type: 'mood' }))
+      ];
+
+      if (combinedTags.length > 0) {
+        phaseOccurrences[phaseName].totalDays += 1;
+        combinedTags.forEach((tag) => {
+          const key = `${tag.type}:${tag.name}`;
+          phaseOccurrences[phaseName].items[key] =
+            (phaseOccurrences[phaseName].items[key] || 0) + 1;
+        });
+
+        // Record in 3-day proximity window for cycle-day specific prediction
+        [-1, 0, 1].forEach((delta) => {
+          const targetCd = cd + delta;
+          if (targetCd >= 1 && targetCd <= 40) {
+            if (!cycleDayWindowCounts[targetCd]) {
+              cycleDayWindowCounts[targetCd] = { cyclesSeen: new Set(), tags: {} };
+            }
+            cycleDayWindowCounts[targetCd].cyclesSeen.add(cIdx);
+            combinedTags.forEach((tag) => {
+              const key = `${tag.type}:${tag.name}`;
+              if (!cycleDayWindowCounts[targetCd].tags[key]) {
+                cycleDayWindowCounts[targetCd].tags[key] = new Set();
+              }
+              cycleDayWindowCounts[targetCd].tags[key].add(cIdx);
+            });
+          }
+        });
+      }
+    }
+  });
+
+  // Helper to predict likely symptoms & moods for any Cycle Day
+  const predictSymptomsForCycleDay = (targetCd) => {
+    if (!targetCd) return [];
+    const normalizedCd = ((targetCd - 1) % expectedCycleLength) + 1;
+    const phaseName = getPhaseForCycleDay(normalizedCd);
+    const windowData = cycleDayWindowCounts[normalizedCd];
+    const phaseData = phaseOccurrences[phaseName] || { totalDays: 0, items: {} };
+
+    const scores = {};
+
+    // Combine exact Cycle-Day window probability with Phase-level baseline probability
+    if (windowData && windowData.cyclesSeen.size > 0) {
+      const denom = Math.max(2, windowData.cyclesSeen.size);
+      Object.entries(windowData.tags).forEach(([key, cycleSet]) => {
+        const prob = Math.min(96, Math.round((cycleSet.size / denom) * 100));
+        scores[key] = { prob, count: cycleSet.size, source: `Cycle Day ${normalizedCd} history` };
+      });
+    }
+
+    if (phaseData.totalDays > 0) {
+      Object.entries(phaseData.items).forEach(([key, count]) => {
+        const phaseProb = Math.min(92, Math.round((count / phaseData.totalDays) * 100));
+        if (!scores[key] || phaseProb > scores[key].prob) {
+          scores[key] = {
+            prob: scores[key] ? Math.round((scores[key].prob * 0.65) + (phaseProb * 0.35)) : phaseProb,
+            count,
+            source: `${phaseName} Phase pattern`
+          };
+        }
+      });
+    }
+
+    return Object.entries(scores)
+      .map(([key, val]) => {
+        const [type, name] = key.split(':');
+        return {
+          name,
+          type,
+          probability: val.prob,
+          occurrences: val.count,
+          source: val.source,
+          phase: phaseName
+        };
+      })
+      .filter((item) => item.probability >= 25)
+      .sort((a, b) => b.probability - a.probability)
+      .slice(0, 6);
+  };
+
+  // Build Phase-by-Phase Symptom & Mood Forecast Matrix
+  const phaseSymptomForecast = {};
+  ['Menstrual', 'Follicular', 'Ovulatory', 'Luteal'].forEach((pName) => {
+    const pData = phaseOccurrences[pName];
+    const denom = Math.max(1, pData.totalDays);
+    phaseSymptomForecast[pName] = Object.entries(pData.items)
+      .map(([key, count]) => {
+        const [type, name] = key.split(':');
+        return {
+          name,
+          type,
+          count,
+          probability: Math.min(95, Math.round((count / denom) * 100))
+        };
+      })
+      .sort((a, b) => b.probability - a.probability)
+      .slice(0, 5);
+  });
+
+  const todaySymptomPredictions = predictSymptomsForCycleDay(currentCycleDay || 1);
+  const tomorrowSymptomPredictions = predictSymptomsForCycleDay((currentCycleDay || 1) + 1);
+  const upcomingPmsPredictions = predictSymptomsForCycleDay(Math.max(1, expectedCycleLength - 2));
+
+  // 7. Summary Statistics
   const lengths = validCycles.map((c) => c.cycleLength);
   const shortestCycle = lengths.length ? Math.min(...lengths) : expectedCycleLength;
   const longestCycle = lengths.length ? Math.max(...lengths) : expectedCycleLength;
@@ -387,6 +577,7 @@ function analyzeCycleData(logs, settings) {
     expectedCycleLength,
     expectedPeriodLength,
     lutealLength,
+    ovDayInCycle,
     stdDev: stdDev.toFixed(1),
     confidenceDays,
     shortestCycle,
@@ -398,8 +589,15 @@ function analyzeCycleData(logs, settings) {
     fertileWindowEnd,
     daysUntilNextPeriod,
     currentPhase,
+    predictedCycles,
     calendarMarkers,
-    latestEpisode
+    latestEpisode,
+    todaySymptomPredictions,
+    tomorrowSymptomPredictions,
+    upcomingPmsPredictions,
+    phaseSymptomForecast,
+    getPhaseForCycleDay,
+    predictSymptomsForCycleDay
   };
 }
 
@@ -412,9 +610,10 @@ const PHASE_DETAILS = {
     color: 'from-rose-500 to-pink-600',
     badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
     accent: '#f43f5e',
+    energy: 'Low / Restorative',
     hormones: 'Estrogen & Progesterone are at baseline lows.',
     insight:
-      'Uterine lining is shedding. Energy and iron stores dip naturally—prioritize warm nutrient-dense foods, magnesium, gentle movement, and restorative sleep.',
+      'Uterine lining is shedding. Energy and iron stores dip naturally—prioritize warm nutrient-dense foods, dark chocolate (magnesium), hydration, and extra rest.',
     fertility: 'Very Low Fertility'
   },
   Follicular: {
@@ -422,6 +621,7 @@ const PHASE_DETAILS = {
     color: 'from-violet-500 to-purple-600',
     badgeBg: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
     accent: '#8b5cf6',
+    energy: 'Rising / Creative',
     hormones: 'FSH stimulates follicles; Estrogen rises steadily.',
     insight:
       'Rising estradiol boosts verbal fluency, physical stamina, mood, and collagen synthesis. Ideal window for strength training, brainstorming, and high-focus work.',
@@ -432,6 +632,7 @@ const PHASE_DETAILS = {
     color: 'from-emerald-400 to-teal-600',
     badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     accent: '#10b981',
+    energy: 'Peak / Social & Magnetic',
     hormones: 'Peak Estrogen triggers a sharp LH surge; slight Testosterone spike.',
     insight:
       'The dominant follicle releases an egg (viable ~12–24h). Cervical fluid becomes clear/stretchy (egg-white) to nourish sperm. Basal body temperature shifts upward right after.',
@@ -442,9 +643,10 @@ const PHASE_DETAILS = {
     color: 'from-amber-500 to-orange-600',
     badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
     accent: '#f59e0b',
+    energy: 'Steady → Winding Down',
     hormones: 'Corpus luteum secretes Progesterone; BBT stays elevated (+0.3°C).',
     insight:
-      'Progesterone warms the body and raises resting metabolic rate slightly. In the late luteal days, falling hormones can trigger PMS—complex carbs and B6 help stabilize mood.',
+      'Progesterone warms the body and raises resting metabolic rate slightly. In the late luteal days, falling hormones can trigger PMS—complex carbs, hydration, and B6 help stabilize mood.',
     fertility: 'Low Fertility (Post-Ovulation)'
   },
   Unknown: {
@@ -452,9 +654,10 @@ const PHASE_DETAILS = {
     color: 'from-slate-600 to-slate-700',
     badgeBg: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
     accent: '#94a3b8',
-    hormones: 'Log your most recent period start date to calibrate.',
+    energy: 'Uncalibrated',
+    hormones: 'Log your recent or past period dates to calibrate.',
     insight:
-      'Tap "Log Period" or select any date on the Calendar to begin 100% private local predictions.',
+      'Tap "Log Period" or use "Add Past Cycles" to enter your previous year history for accurate local predictions.',
     fertility: 'Uncalibrated'
   }
 };
@@ -463,22 +666,22 @@ const PHASE_DETAILS = {
 // MAIN APPLICATION COMPONENT
 // ============================================================================
 export default function App() {
-  // --- Persistent State in localStorage ---
+  // --- Persistent State in localStorage (v2 key with fresh multi-month/year demo data) ---
   const [logs, setLogs] = useState(() => {
     try {
-      const saved = localStorage.getItem('aura_local_logs_v1');
+      const saved = localStorage.getItem('aura_local_logs_v2');
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error('Failed to read localStorage logs:', e);
     }
     const sample = generateSampleData();
-    localStorage.setItem('aura_local_logs_v1', JSON.stringify(sample));
+    localStorage.setItem('aura_local_logs_v2', JSON.stringify(sample));
     return sample;
   });
 
   const [settings, setSettings] = useState(() => {
     try {
-      const saved = localStorage.getItem('aura_local_settings_v1');
+      const saved = localStorage.getItem('aura_local_settings_v2');
       if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
     } catch (e) {
       console.error('Failed to read localStorage settings:', e);
@@ -489,7 +692,7 @@ export default function App() {
   // Save to localStorage on change
   useEffect(() => {
     try {
-      localStorage.setItem('aura_local_logs_v1', JSON.stringify(logs));
+      localStorage.setItem('aura_local_logs_v2', JSON.stringify(logs));
     } catch (e) {
       console.error('Storage quota error:', e);
     }
@@ -497,7 +700,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem('aura_local_settings_v1', JSON.stringify(settings));
+      localStorage.setItem('aura_local_settings_v2', JSON.stringify(settings));
     } catch (e) {
       console.error('Storage settings error:', e);
     }
@@ -517,13 +720,14 @@ export default function App() {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [confirmClearModal, setConfirmClearModal] = useState(false);
   const [showCarePopup, setShowCarePopup] = useState(false);
+  const [showBatchPastModal, setShowBatchPastModal] = useState(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3200);
   };
 
-  // --- Cycle Analytics Computation ---
+  // --- Cycle Analytics & Symptom Prediction Computation ---
   const cycleStats = useMemo(() => analyzeCycleData(logs, settings), [logs, settings]);
 
   // --- Quick Period Toggle for Selected Date ---
@@ -532,12 +736,10 @@ export default function App() {
     const hasFlow = existing.flow && existing.flow !== 'none';
 
     if (hasFlow) {
-      // Remove flow on this date
       const updated = { ...existing, flow: null };
       setLogs((prev) => ({ ...prev, [dateStr]: updated }));
       showToast(`Removed period flow for ${formatDisplayDate(dateStr)}`);
     } else {
-      // Check if previous day had flow; if not, ask/auto-fill or log Medium flow
       const updated = { ...existing, flow: 'medium' };
       setLogs((prev) => ({ ...prev, [dateStr]: updated }));
       showToast(`Logged period flow for ${formatDisplayDate(dateStr)}`);
@@ -545,27 +747,56 @@ export default function App() {
     }
   };
 
-  // --- Log multiple period days at once (e.g. "Log 5-day Period Starting Today") ---
-  const handleLogFullPeriodEpisode = (startDateStr) => {
-    const len = cycleStats.expectedPeriodLength || 5;
-    const today = getTodayStr();
-    const newLogs = { ...logs };
+  // --- Batch Add Past Period Cycle (Supports Previous Years + Optional Typical Symptoms) ---
+  const handleBatchAddPastPeriod = ({ startDate, durationDays, flowIntensity, symptoms, moods, notes }) => {
+    if (!startDate) return;
+    const dur = Math.max(1, Math.min(12, Number(durationDays) || 5));
     const defaultFlows = ['medium', 'heavy', 'medium', 'light', 'spotting'];
 
-    let daysLogged = 0;
-    for (let i = 0; i < len; i++) {
-      const d = addDays(startDateStr, i);
-      if (diffDays(d, today) <= 0) {
-        newLogs[d] = {
-          ...(newLogs[d] || { date: d }),
-          flow: newLogs[d]?.flow || defaultFlows[i] || 'light'
+    setLogs((prev) => {
+      const next = { ...prev };
+      for (let i = 0; i < dur; i++) {
+        const d = addDays(startDate, i);
+        const existing = next[d] || { date: d };
+        next[d] = {
+          ...existing,
+          flow: flowIntensity === 'auto' ? (defaultFlows[i] || 'light') : flowIntensity,
+          symptoms:
+            i < 2 && symptoms && symptoms.length > 0
+              ? Array.from(new Set([...(existing.symptoms || []), ...symptoms]))
+              : existing.symptoms || [],
+          mood:
+            i < 2 && moods && moods.length > 0
+              ? Array.from(new Set([...(existing.mood || []), ...moods]))
+              : existing.mood || [],
+          notes: i === 0 && notes ? notes : existing.notes || ''
         };
-        daysLogged++;
       }
-    }
-    setLogs(newLogs);
-    showToast(`Logged ${daysLogged} period day(s) starting ${formatDisplayDate(startDateStr)}`);
-    setShowCarePopup(true);
+      return next;
+    });
+
+    showToast(
+      `Added ${dur}-day past period starting ${formatDisplayDate(startDate, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })}`
+    );
+  };
+
+  // --- Delete an Entire Logged Period Episode ---
+  const handleDeleteEpisode = (episode) => {
+    if (!episode || !episode.days) return;
+    setLogs((prev) => {
+      const next = { ...prev };
+      episode.days.forEach((d) => {
+        if (next[d]) {
+          next[d] = { ...next[d], flow: null };
+        }
+      });
+      return next;
+    });
+    showToast(`Removed period starting ${formatDisplayDate(episode.startDate, { month: 'short', day: 'numeric', year: 'numeric' })}`);
   };
 
   // --- Update Single Day Log ---
@@ -725,6 +956,17 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setShowCarePopup(true)}
+              className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition flex items-center gap-1 ${isDark
+                ? 'bg-rose-950/50 border-rose-500/40 text-rose-200 hover:bg-rose-900/60'
+                : 'bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100'
+                }`}
+              title="Open Nechu's Comfort Care Note"
+            >
+              <span>🍫</span>
+              <span className="hidden sm:inline">Care Note</span>
+            </button>
             {settings.pinCode && (
               <button
                 onClick={() => setIsLocked(true)}
@@ -787,9 +1029,10 @@ export default function App() {
                 setActiveTab('log');
               }}
               onQuickLogPeriod={handleQuickLogPeriod}
-              onLogFullPeriodEpisode={handleLogFullPeriodEpisode}
               displayTemp={displayTemp}
               onTriggerCareModal={() => setShowCarePopup(true)}
+              onOpenBatchPastModal={() => setShowBatchPastModal(true)}
+              onNavigateAnalytics={() => setActiveTab('analytics')}
             />
           )}
 
@@ -809,6 +1052,7 @@ export default function App() {
               }}
               onQuickLogPeriod={handleQuickLogPeriod}
               displayTemp={displayTemp}
+              onOpenBatchPastModal={() => setShowBatchPastModal(true)}
             />
           )}
 
@@ -822,6 +1066,8 @@ export default function App() {
               setSelectedDate={setSelectedDate}
               updateDayLog={updateDayLog}
               showToast={showToast}
+              cycleStats={cycleStats}
+              onOpenBatchPastModal={() => setShowBatchPastModal(true)}
             />
           )}
 
@@ -832,6 +1078,7 @@ export default function App() {
               settings={settings}
               cycleStats={cycleStats}
               displayTemp={displayTemp}
+              onOpenBatchPastModal={() => setShowBatchPastModal(true)}
             />
           )}
 
@@ -848,9 +1095,22 @@ export default function App() {
               confirmClearModal={confirmClearModal}
               setConfirmClearModal={setConfirmClearModal}
               onTriggerCareModal={() => setShowCarePopup(true)}
+              onOpenBatchPastModal={() => setShowBatchPastModal(true)}
             />
           )}
         </main>
+
+        {/* Batch Add Past Cycles Modal (Add Previous Year / Historical Data Easily) */}
+        {showBatchPastModal && (
+          <BatchPastCyclesModal
+            isDark={isDark}
+            settings={settings}
+            cycleStats={cycleStats}
+            onClose={() => setShowBatchPastModal(false)}
+            onAddPastPeriod={handleBatchAddPastPeriod}
+            onDeleteEpisode={handleDeleteEpisode}
+          />
+        )}
 
         {/* Special Period Care Modal for Nechu */}
         {showCarePopup && (
@@ -889,7 +1149,7 @@ export default function App() {
                 >
                   "
                   {settings.periodCareMessage ||
-                    "Dear Nechu, I know you're having a hard time. Hydrate and have your favorite chocolates."}
+                    "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."}
                   "
                 </p>
                 <p
@@ -1028,9 +1288,10 @@ function DashboardView({
   setSelectedDate,
   onOpenLogger,
   onQuickLogPeriod,
-  onLogFullPeriodEpisode,
   displayTemp,
-  onTriggerCareModal
+  onTriggerCareModal,
+  onOpenBatchPastModal,
+  onNavigateAnalytics
 }) {
   const today = getTodayStr();
   const todayLog = logs[today] || {};
@@ -1040,7 +1301,7 @@ function DashboardView({
   // Dial calculations
   const cycleLen = cycleStats.expectedCycleLength || 28;
   const periodLen = cycleStats.expectedPeriodLength || 5;
-  const ovDay = cycleLen - (cycleStats.lutealLength || 14);
+  const ovDay = cycleStats.ovDayInCycle || cycleLen - (cycleStats.lutealLength || 14);
   const currentDay = cycleStats.currentCycleDay || 1;
   const clampedDay = Math.min(Math.max(currentDay, 1), cycleLen);
 
@@ -1049,7 +1310,6 @@ function DashboardView({
   const strokeWidth = 18;
   const center = size / 2;
   const radius = center - strokeWidth - 6;
-  const circumference = 2 * Math.PI * radius;
 
   // Helper to convert cycle day (1..cycleLen) to angle in degrees (top = -90deg)
   const dayToAngle = (day) => ((day - 1) / cycleLen) * 360 - 90;
@@ -1100,7 +1360,7 @@ function DashboardView({
                 }`}
               title="Preview Nechu's Period Care Card"
             >
-              🍫 {previewCareCard ? 'Hide Care Note' : 'Care Note'}
+              🍫 {previewCareCard ? 'Hide Care' : 'Preview Care'}
             </button>
           )}
           <span className={`text-xs font-semibold px-3 py-1 rounded-full border ${phaseInfo.badgeBg}`}>
@@ -1145,7 +1405,7 @@ function DashboardView({
               >
                 "
                 {settings.periodCareMessage ||
-                  "Dear Nechu, I know you're having a hard time. Hydrate and have your favorite chocolates."}
+                  "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."}
                 "
               </p>
               <div className="flex items-center gap-3 mt-2.5 text-[11px] font-medium opacity-85">
@@ -1168,7 +1428,6 @@ function DashboardView({
           : 'bg-gradient-to-b from-rose-50/70 to-white border-rose-100 shadow-sm'
           }`}
       >
-        {/* Subtle Ambient Glow */}
         <div
           className="w-48 h-48 rounded-full blur-3xl opacity-20 absolute -top-10 pointer-events-none"
           style={{ backgroundColor: phaseInfo.accent }}
@@ -1176,7 +1435,6 @@ function DashboardView({
 
         <div className="relative flex items-center justify-center my-1">
           <svg width={size} height={size} className="overflow-visible">
-            {/* Base Track Circle */}
             <circle
               cx={center}
               cy={center}
@@ -1315,6 +1573,18 @@ function DashboardView({
             Symptoms & BBT
           </button>
         </div>
+
+        {/* Quick Link to Add Previous Year / Past Cycles */}
+        <button
+          onClick={onOpenBatchPastModal}
+          className={`mt-2.5 w-full py-2.5 px-3 rounded-2xl text-xs font-semibold flex items-center justify-center gap-2 border transition ${isDark
+            ? 'bg-zinc-950/60 border-zinc-800 text-violet-300 hover:bg-zinc-900'
+            : 'bg-violet-50/70 border-violet-200 text-violet-800 hover:bg-violet-100'
+            }`}
+        >
+          <Clock className="w-3.5 h-3.5 text-violet-400" />
+          + Log Past / Previous Year Period Dates ({cycleStats.cycles.length} cycles saved)
+        </button>
       </div>
 
       {/* Key Cycle Forecast Pills (Next Period, Ovulation, Cycle Length) */}
@@ -1370,6 +1640,80 @@ function DashboardView({
         </div>
       </div>
 
+      {/* NEW: Symptom & Phase Forecast Card (AI-Free Local Pattern Prediction) */}
+      <div
+        className={`rounded-3xl p-4 border ${isDark ? 'bg-zinc-900/70 border-zinc-800/80' : 'bg-white border-rose-100 shadow-sm'
+          }`}
+      >
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-rose-400" />
+            <div>
+              <h3 className="text-sm font-bold">Symptom & Mood Forecast</h3>
+              <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                Predicted for Day {clampedDay} ({phaseInfo.name}) from your past cycles
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onNavigateAnalytics}
+            className="text-[11px] font-semibold text-rose-400 hover:underline shrink-0"
+          >
+            Full Forecast →
+          </button>
+        </div>
+
+        {cycleStats.todaySymptomPredictions.length > 0 ? (
+          <div className="space-y-2 mt-2">
+            <div className="flex flex-wrap gap-1.5">
+              {cycleStats.todaySymptomPredictions.map((pred) => (
+                <div
+                  key={`${pred.type}-${pred.name}`}
+                  className={`px-3 py-1.5 rounded-2xl border text-xs flex items-center gap-2 ${pred.type === 'mood'
+                    ? isDark
+                      ? 'bg-purple-950/40 border-purple-500/30 text-purple-200'
+                      : 'bg-purple-50 border-purple-200 text-purple-900'
+                    : isDark
+                      ? 'bg-rose-950/40 border-rose-500/30 text-rose-200'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                    }`}
+                >
+                  <span className="font-semibold">
+                    {pred.type === 'mood' ? '✨' : '⚡'} {pred.name}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${pred.probability >= 70
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-zinc-800 text-zinc-300'
+                      }`}
+                  >
+                    {pred.probability}% likely
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className={`text-[11px] pt-1 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+              <strong>Energy Level:</strong> {phaseInfo.energy} •{' '}
+              {cycleStats.tomorrowSymptomPredictions.length > 0 && (
+                <span>
+                  Tomorrow's watch:{' '}
+                  <span className="text-rose-300 font-medium">
+                    {cycleStats.tomorrowSymptomPredictions
+                      .slice(0, 2)
+                      .map((p) => `${p.name} (${p.probability}%)`)
+                      .join(', ')}
+                  </span>
+                </span>
+              )}
+            </p>
+          </div>
+        ) : (
+          <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+            Log symptoms across a few days to unlock personalized Cycle Day symptom probabilities.
+          </p>
+        )}
+      </div>
+
       {/* Physiological & Hormone Curve Visualizer */}
       <div
         className={`rounded-3xl p-4 border ${isDark ? 'bg-zinc-900/70 border-zinc-800/80' : 'bg-white border-rose-100 shadow-sm'
@@ -1387,7 +1731,6 @@ function DashboardView({
           </span>
         </div>
 
-        {/* Dynamic SVG Hormone Curve calibrated to user's cycle length & ovulation day */}
         <HormoneCurveChart
           cycleLen={cycleLen}
           ovDay={ovDay}
@@ -1422,6 +1765,7 @@ function DashboardView({
           (todayLog.symptoms && todayLog.symptoms.length > 0) ||
           (todayLog.mood && todayLog.mood.length > 0) ||
           todayLog.bbt ||
+          todayLog.water ||
           todayLog.notes ? (
           <div className="space-y-2.5 text-xs">
             <div className="flex flex-wrap gap-1.5">
@@ -1433,6 +1777,11 @@ function DashboardView({
               {todayLog.bbt && (
                 <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
                   🌡️ BBT: {displayTemp(todayLog.bbt)}°{settings.bbtUnit}
+                </span>
+              )}
+              {todayLog.water && (
+                <span className="px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 font-semibold">
+                  💧 Water: {todayLog.water} glasses
                 </span>
               )}
               {todayLog.mucus && todayLog.mucus !== 'none' && (
@@ -1485,113 +1834,7 @@ function DashboardView({
 }
 
 // ============================================================================
-// HORMONE CURVE SVG VISUALIZER COMPONENT
-// ============================================================================
-function HormoneCurveChart({ cycleLen, ovDay, currentDay, isDark }) {
-  const width = 340;
-  const height = 105;
-
-  // Generate smooth paths for Estrogen, Progesterone, and LH across 1..cycleLen
-  const pointsEstrogen = [];
-  const pointsProgesterone = [];
-  const pointsLH = [];
-
-  for (let d = 1; d <= cycleLen; d++) {
-    const x = ((d - 1) / (cycleLen - 1)) * width;
-    const normOv = ovDay;
-
-    // Estrogen peaks just before ovulation, dips, and has a secondary smaller dome in mid-luteal
-    const ePeak1 = Math.exp(-Math.pow((d - (normOv - 1)) / 3.2, 2)) * 0.78;
-    const ePeak2 = Math.exp(-Math.pow((d - (normOv + (cycleLen - normOv) * 0.5)) / 4.5, 2)) * 0.42;
-    const eVal = 0.12 + ePeak1 + ePeak2;
-    const yE = height - Math.min(0.95, eVal) * (height - 18) - 8;
-    pointsEstrogen.push(`${x.toFixed(1)},${yE.toFixed(1)}`);
-
-    // LH surges sharply at normOv
-    const lhSurge = Math.exp(-Math.pow((d - normOv) / 1.1, 2)) * 0.85;
-    const yLH = height - (0.08 + lhSurge) * (height - 18) - 8;
-    pointsLH.push(`${x.toFixed(1)},${yLH.toFixed(1)}`);
-
-    // Progesterone stays flat in follicular, rises strongly in luteal phase
-    const lutealMid = normOv + (cycleLen - normOv) * 0.52;
-    const pRise = d > normOv - 1 ? Math.exp(-Math.pow((d - lutealMid) / 4.0, 2)) * 0.82 : 0.02;
-    const yP = height - (0.08 + pRise) * (height - 18) - 8;
-    pointsProgesterone.push(`${x.toFixed(1)},${yP.toFixed(1)}`);
-  }
-
-  const currentX = ((Math.min(cycleLen, Math.max(1, currentDay)) - 1) / (cycleLen - 1)) * width;
-
-  return (
-    <div className="w-full overflow-hidden">
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28 overflow-visible">
-        {/* Background Grid Lines */}
-        <line
-          x1="0"
-          y1={height - 8}
-          x2={width}
-          y2={height - 8}
-          stroke={isDark ? '#27272a' : '#f4f4f5'}
-          strokeWidth="1"
-        />
-
-        {/* LH Curve (Teal) */}
-        <polyline
-          fill="none"
-          stroke="#10b981"
-          strokeWidth="2"
-          strokeDasharray="3 2"
-          points={pointsLH.join(' ')}
-          opacity="0.85"
-        />
-
-        {/* Estrogen Curve (Violet/Rose) */}
-        <polyline
-          fill="none"
-          stroke="#c084fc"
-          strokeWidth="2.5"
-          points={pointsEstrogen.join(' ')}
-        />
-
-        {/* Progesterone Curve (Amber) */}
-        <polyline
-          fill="none"
-          stroke="#f59e0b"
-          strokeWidth="2.5"
-          points={pointsProgesterone.join(' ')}
-        />
-
-        {/* Current Day Vertical Marker */}
-        <line
-          x1={currentX}
-          y1="6"
-          x2={currentX}
-          y2={height - 6}
-          stroke="#f43f5e"
-          strokeWidth="2"
-        />
-        <circle cx={currentX} cy="10" r="4" fill="#f43f5e" />
-      </svg>
-
-      <div className="flex items-center justify-between text-[10px] mt-1 px-1">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1 text-purple-300">
-            <span className="w-2 h-2 rounded-full bg-purple-400" /> Estrogen
-          </span>
-          <span className="flex items-center gap-1 text-emerald-300">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" /> LH Surge
-          </span>
-          <span className="flex items-center gap-1 text-amber-300">
-            <span className="w-2 h-2 rounded-full bg-amber-400" /> Progesterone
-          </span>
-        </div>
-        <span className="text-rose-400 font-semibold">▲ Today</span>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// 2. INTERACTIVE MONTHLY CALENDAR VIEW
+// 2. INTERACTIVE MULTI-YEAR CALENDAR VIEW (Supports Previous Year & Future Predictions)
 // ============================================================================
 function CalendarView({
   isDark,
@@ -1604,13 +1847,35 @@ function CalendarView({
   setSelectedDate,
   onOpenLogger,
   onQuickLogPeriod,
-  displayTemp
+  displayTemp,
+  onOpenBatchPastModal
 }) {
   const today = getTodayStr();
+  const currentActualYear = new Date().getFullYear();
   const year = calendarMonth.getFullYear();
   const month = calendarMonth.getMonth();
 
-  const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
+  // Multi-year selector options (from 5 years ago up to next year)
+  const yearOptions = [];
+  for (let y = currentActualYear - 5; y <= currentActualYear + 1; y++) {
+    yearOptions.push(y);
+  }
+  const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December'
+  ];
+
+  const firstDayOfMonth = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const prevMonth = () => setCalendarMonth(new Date(year, month - 1, 1));
@@ -1633,42 +1898,117 @@ function CalendarView({
   const selLog = logs[selectedDate] || {};
   const selMarker = cycleStats.calendarMarkers[selectedDate] || {};
 
+  // Calculate what Cycle Day the selectedDate belongs to (if after latest or historical cycle start)
+  const selectedCycleDayInfo = useMemo(() => {
+    for (let i = cycleStats.cycles.length - 1; i >= 0; i--) {
+      const c = cycleStats.cycles[i];
+      const diff = diffDays(selectedDate, c.startDate);
+      if (diff >= 0 && (c.cycleLength ? diff < c.cycleLength : diff < 90)) {
+        const cd = diff + 1;
+        const phase = cycleStats.getPhaseForCycleDay(
+          ((cd - 1) % cycleStats.expectedCycleLength) + 1,
+          Boolean(selLog.flow && selLog.flow !== 'none')
+        );
+        return { cd, phase, predictedSymptoms: cycleStats.predictSymptomsForCycleDay(cd) };
+      }
+    }
+    return null;
+  }, [selectedDate, cycleStats, selLog]);
+
   return (
     <div className="space-y-4">
-      {/* Month Header Controls */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-bold">
-            {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </h2>
-          <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-            Tap any date to inspect or log flow & symptoms
-          </p>
+      {/* Multi-Year & Month Jump Controls */}
+      <div className="flex flex-col gap-2.5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold">Cycle & Fertility Calendar</h2>
+            <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              Jump to any past year or future month to log or inspect
+            </p>
+          </div>
+          <button
+            onClick={onOpenBatchPastModal}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-violet-600 to-rose-500 text-white shadow-sm flex items-center gap-1.5"
+          >
+            <Clock className="w-3.5 h-3.5" />
+            + Add Past Cycles
+          </button>
         </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={goToToday}
-            className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${isDark
-              ? 'bg-zinc-900 border-zinc-800 text-rose-300'
-              : 'bg-rose-50 border-rose-200 text-rose-700'
-              }`}
-          >
-            Today
-          </button>
-          <button
-            onClick={prevMonth}
-            className={`p-1.5 rounded-xl border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-rose-100'
-              }`}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={nextMonth}
-            className={`p-1.5 rounded-xl border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-rose-100'
-              }`}
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+
+        {/* Month & Year Dropdown Bar */}
+        <div
+          className={`flex items-center justify-between p-2 rounded-2xl border ${isDark ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+            }`}
+        >
+          <div className="flex items-center gap-1.5">
+            <select
+              value={month}
+              onChange={(e) => setCalendarMonth(new Date(year, Number(e.target.value), 1))}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border focus:outline-none ${isDark
+                ? 'bg-zinc-950 border-zinc-800 text-zinc-100'
+                : 'bg-rose-50/60 border-rose-200 text-zinc-900'
+                }`}
+            >
+              {monthNames.map((mName, idx) => (
+                <option key={mName} value={idx}>
+                  {mName}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={year}
+              onChange={(e) => setCalendarMonth(new Date(Number(e.target.value), month, 1))}
+              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border focus:outline-none ${isDark
+                ? 'bg-zinc-950 border-zinc-800 text-rose-300'
+                : 'bg-rose-50/60 border-rose-200 text-rose-800'
+                }`}
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y} {y === currentActualYear - 1 ? '(Prev Year)' : y === currentActualYear ? '(Now)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCalendarMonth(new Date(currentActualYear - 1, month, 1))}
+              className={`px-2 py-1.5 rounded-xl text-[11px] font-semibold border ${year === currentActualYear - 1
+                ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+                : isDark
+                  ? 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+                  : 'bg-zinc-100 border-zinc-200 text-zinc-700'
+                }`}
+              title={`Jump to ${currentActualYear - 1}`}
+            >
+              {currentActualYear - 1}
+            </button>
+            <button
+              onClick={goToToday}
+              className={`px-2.5 py-1.5 rounded-xl text-[11px] font-semibold border ${isDark
+                ? 'bg-zinc-950 border-zinc-800 text-rose-300'
+                : 'bg-rose-50 border-rose-200 text-rose-700'
+                }`}
+            >
+              Today
+            </button>
+            <button
+              onClick={prevMonth}
+              className={`p-1.5 rounded-xl border ${isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-rose-100'
+                }`}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={nextMonth}
+              className={`p-1.5 rounded-xl border ${isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-rose-100'
+                }`}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1732,21 +2072,18 @@ function CalendarView({
               >
                 <span>{dayNum}</span>
 
-                {/* Today Indicator */}
                 {isToday && !hasFlow && (
                   <span className="text-[8px] font-bold uppercase text-rose-400 leading-none">
                     Today
                   </span>
                 )}
 
-                {/* Ovulation Star */}
                 {isOvulation && (
                   <span className="absolute -top-1 -right-1 text-[10px]" title="Estimated Ovulation">
                     ✦
                   </span>
                 )}
 
-                {/* Symptom/BBT Dot Indicator */}
                 {hasSymptoms && (
                   <span
                     className={`w-1.5 h-1.5 rounded-full mt-0.5 ${hasFlow ? 'bg-white' : 'bg-purple-400'
@@ -1779,33 +2116,40 @@ function CalendarView({
         </div>
       </div>
 
-      {/* Selected Date Inspector Sheet */}
+      {/* Selected Date Inspector & Symptom Prediction Sheet */}
       <div
-        className={`rounded-3xl p-4 border ${isDark ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+        className={`rounded-3xl p-4 border space-y-3 ${isDark ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-sm">
-              {formatDisplayDate(selectedDate, {
-                weekday: 'long',
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric'
-              })}
-            </h3>
-            <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-sm">
+                {formatDisplayDate(selectedDate, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric'
+                })}
+              </h3>
+              {selectedCycleDayInfo && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  CD {selectedCycleDayInfo.cd} • {selectedCycleDayInfo.phase}
+                </span>
+              )}
+            </div>
+            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
               {selMarker.isOvulation
                 ? 'Peak Fertility • Estimated Ovulation Day'
                 : selMarker.isFertile
                   ? 'High Fertility Window'
                   : selMarker.isPredictedPeriod
                     ? 'Predicted Period Day'
-                    : 'Tap below to log or edit records'}
+                    : 'Tap + Period or Full Log to record data for this date'}
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={() => onQuickLogPeriod(selectedDate)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${selLog.flow && selLog.flow !== 'none'
@@ -1827,11 +2171,16 @@ function CalendarView({
           </div>
         </div>
 
-        {/* Details for Selected Day */}
+        {/* Logged Items on Selected Date */}
         <div className="flex flex-wrap gap-1.5 text-xs">
           {selLog.bbt && (
             <span className="px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
               🌡️ {displayTemp(selLog.bbt)}°{settings.bbtUnit}
+            </span>
+          )}
+          {selLog.water && (
+            <span className="px-2.5 py-1 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+              💧 {selLog.water} glasses
             </span>
           )}
           {selLog.mucus && selLog.mucus !== 'none' && (
@@ -1856,19 +2205,28 @@ function CalendarView({
               {s}
             </span>
           ))}
-          {!selLog.flow &&
-            !selLog.bbt &&
-            (!selLog.symptoms || selLog.symptoms.length === 0) &&
-            (!selLog.mood || selLog.mood.length === 0) && (
-              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                No specific symptoms logged on this date.
-              </span>
-            )}
         </div>
-        {selLog.notes && (
-          <p className={`mt-2 text-xs italic ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-            Note: "{selLog.notes}"
-          </p>
+
+        {/* Predicted Symptoms for Selected Date (if future or unlogged) */}
+        {selectedCycleDayInfo && selectedCycleDayInfo.predictedSymptoms.length > 0 && (
+          <div className={`pt-2 border-t ${isDark ? 'border-zinc-800/70' : 'border-rose-100'}`}>
+            <p className={`text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              Expected Signals for Cycle Day {((selectedCycleDayInfo.cd - 1) % cycleStats.expectedCycleLength) + 1} ({selectedCycleDayInfo.phase}):
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedCycleDayInfo.predictedSymptoms.slice(0, 4).map((p) => (
+                <span
+                  key={p.name}
+                  className={`text-[11px] px-2 py-0.5 rounded-lg border ${isDark
+                    ? 'bg-zinc-950/70 border-zinc-800 text-zinc-300'
+                    : 'bg-rose-50/60 border-rose-200 text-zinc-700'
+                    }`}
+                >
+                  {p.name} <strong className="text-rose-400">{p.probability}%</strong>
+                </span>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1876,7 +2234,7 @@ function CalendarView({
 }
 
 // ============================================================================
-// 3. DAILY LOGGER & CUSTOM SYMPTOM BUILDER VIEW
+// 3. DAILY LOGGER & CUSTOM SYMPTOM BUILDER VIEW (With Direct Any-Year Date Picker)
 // ============================================================================
 function LoggerView({
   isDark,
@@ -1886,7 +2244,9 @@ function LoggerView({
   selectedDate,
   setSelectedDate,
   updateDayLog,
-  showToast
+  showToast,
+  cycleStats,
+  onOpenBatchPastModal
 }) {
   const currentLog = logs[selectedDate] || { date: selectedDate };
   const [newCustomSymptom, setNewCustomSymptom] = useState('');
@@ -1897,7 +2257,6 @@ function LoggerView({
       : currentLog.bbt;
   });
 
-  // Sync BBT input when selectedDate changes
   useEffect(() => {
     const log = logs[selectedDate] || {};
     if (!log.bbt) {
@@ -1925,7 +2284,6 @@ function LoggerView({
       updateDayLog(selectedDate, { bbt: null });
       return;
     }
-    // Always store internally in Celsius for uniform charting
     const celsius = settings.bbtUnit === 'F' ? ((num - 32) * 5) / 9 : num;
     if (celsius >= 35.0 && celsius <= 39.5) {
       updateDayLog(selectedDate, { bbt: celsius.toFixed(2) });
@@ -1964,38 +2322,60 @@ function LoggerView({
     { id: 'eggwhite', label: 'Egg-White (Peak)' }
   ];
 
+  const waterGlasses = currentLog.water || 0;
+
   return (
     <div className="space-y-4">
-      {/* Date Switcher Bar */}
+      {/* Date Switcher Bar + Direct Any-Year Date Input + Batch Past Cycles Button */}
       <div
-        className={`flex items-center justify-between p-3 rounded-2xl border ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+        className={`p-3 rounded-2xl border space-y-2.5 ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
       >
-        <button
-          onClick={() => setSelectedDate(addDays(selectedDate, -1))}
-          className="p-2 rounded-xl hover:bg-zinc-800/50"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div className="text-center">
-          <p className="text-[10px] uppercase tracking-wider text-rose-400 font-bold">
-            Daily Body Logger
-          </p>
-          <h2 className="text-sm font-bold">
-            {formatDisplayDate(selectedDate, {
-              weekday: 'short',
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric'
-            })}
-          </h2>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setSelectedDate(addDays(selectedDate, -1))}
+            className="p-2 rounded-xl hover:bg-zinc-800/50"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="text-center">
+            <p className="text-[10px] uppercase tracking-wider text-rose-400 font-bold">
+              Daily Body Logger (Any Year)
+            </p>
+            <h2 className="text-sm font-bold">
+              {formatDisplayDate(selectedDate, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric'
+              })}
+            </h2>
+          </div>
+          <button
+            onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+            className="p-2 rounded-xl hover:bg-zinc-800/50"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
-        <button
-          onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-          className="p-2 rounded-xl hover:bg-zinc-800/50"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
+
+        <div className="flex items-center gap-2 pt-1 border-t border-zinc-800/50">
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+            className={`flex-1 px-3 py-1.5 rounded-xl text-xs font-semibold border ${isDark
+              ? 'bg-zinc-950 border-zinc-800 text-zinc-200'
+              : 'bg-rose-50/50 border-rose-200 text-zinc-800'
+              }`}
+          />
+          <button
+            onClick={onOpenBatchPastModal}
+            className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/40 shrink-0"
+          >
+            + Batch Past Cycles
+          </button>
+        </div>
       </div>
 
       {/* 1. Menstrual Flow Selector */}
@@ -2033,75 +2413,39 @@ function LoggerView({
         </div>
       </div>
 
-      {/* 2. Basal Body Temperature (BBT) & Cervical Fluid */}
+      {/* 2. Hydration Water Intake Tracker */}
       <div
-        className={`p-4 rounded-3xl border space-y-4 ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+        className={`p-4 rounded-3xl border ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
       >
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Thermometer className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-bold">
-                Basal Body Temperature (°{settings.bbtUnit})
-              </h3>
-            </div>
-            <span className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-              Post-ovulation rises ~0.3°C
-            </span>
-          </div>
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <input
-              type="number"
-              step="0.01"
-              placeholder={settings.bbtUnit === 'F' ? 'e.g. 97.45' : 'e.g. 36.35'}
-              value={bbtInput}
-              onChange={(e) => handleSaveBbt(e.target.value)}
-              className={`w-full px-3.5 py-2.5 rounded-2xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500 ${isDark
-                ? 'bg-zinc-950 border-zinc-800 text-zinc-100'
-                : 'bg-rose-50/40 border-rose-200 text-zinc-900'
-                }`}
-            />
-            {bbtInput && (
-              <button
-                onClick={() => handleSaveBbt('')}
-                className="px-3 py-2.5 rounded-2xl text-xs bg-zinc-800 text-zinc-300"
-              >
-                Clear
-              </button>
-            )}
+            <Droplets className="w-4 h-4 text-sky-400" />
+            <h3 className="text-sm font-bold">Hydration Tracker</h3>
           </div>
+          <span className="text-xs font-bold text-sky-400">{waterGlasses} / 10 Glasses</span>
         </div>
-
-        {/* Cervical Mucus */}
-        <div>
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-bold">Cervical Fluid (Fertility Sign)</h3>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {mucusTypes.map((m) => {
-              const active = (currentLog.mucus || 'none') === m.id;
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => updateDayLog(selectedDate, { mucus: m.id })}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${active
-                    ? 'bg-emerald-500 text-white border-emerald-500 font-semibold shadow-sm'
-                    : isDark
-                      ? 'bg-zinc-950/60 border-zinc-800 text-zinc-300'
-                      : 'bg-rose-50/40 border-rose-100 text-zinc-700'
-                    }`}
-                >
-                  {m.label}
-                </button>
-              );
-            })}
-          </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((g) => (
+            <button
+              key={g}
+              onClick={() =>
+                updateDayLog(selectedDate, { water: waterGlasses === g ? g - 1 : g })
+              }
+              className={`w-8 h-9 rounded-xl border text-xs font-bold transition flex items-center justify-center ${g <= waterGlasses
+                ? 'bg-sky-500 text-white border-sky-400 shadow-sm shadow-sky-500/30'
+                : isDark
+                  ? 'bg-zinc-950 border-zinc-800 text-zinc-500'
+                  : 'bg-sky-50/50 border-sky-100 text-zinc-400'
+                }`}
+            >
+              💧
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* 3. Custom Symptoms & Body Signals (With Custom Tag Builder) */}
+      {/* 3. Basal Body Temperature (BBT) & Cervical Fluid */}
       <div
         className={`p-4 rounded-3xl border ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
@@ -2210,10 +2554,10 @@ function LoggerView({
 }
 
 // ============================================================================
-// 4. ANALYTICS, BBT CHART & SYMPTOM CORRELATION VIEW
+// 4. ANALYTICS, FUTURE PHASE/CYCLE PREDICTIONS & SYMPTOM FORECAST VIEW
 // ============================================================================
-function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp }) {
-  // Compute symptom frequency & typical cycle day correlation
+function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp, onOpenBatchPastModal }) {
+  // Compute overall symptom frequency
   const symptomStats = useMemo(() => {
     const counts = {};
     Object.values(logs).forEach((entry) => {
@@ -2223,7 +2567,7 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp }) {
     });
     return Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 6);
+      .slice(0, 8);
   }, [logs]);
 
   // Extract BBT points for the latest/current cycle
@@ -2255,11 +2599,19 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp }) {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-lg font-bold">Cycle Intelligence & History</h2>
-        <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-          Calculated locally via weighted moving average & luteal calibration
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold">Cycle, Phase & Symptom Predictions</h2>
+          <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+            Calibrated across {cycleStats.cycles.length} logged cycles (including past years)
+          </p>
+        </div>
+        <button
+          onClick={onOpenBatchPastModal}
+          className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/40 shrink-0"
+        >
+          + Past Cycles
+        </button>
       </div>
 
       {/* Key Metrics Grid */}
@@ -2288,18 +2640,185 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp }) {
           </span>
           <p className="text-lg font-extrabold text-purple-300 mt-0.5">{regularityLabel}</p>
           <p className={`text-[11px] mt-1 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
-            Variation (SD): ±{cycleStats.stdDev} days
+            Confidence: ±{cycleStats.stdDev} days
           </p>
         </div>
       </div>
 
-      {/* Cycle History Bar Chart & Timeline */}
+      {/* NEW: Upcoming 6-Cycle Period, Fertile Window & Ovulation Predictions */}
       <div
         className={`p-4 rounded-3xl border ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
       >
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold">Logged Cycle History</h3>
+          <div className="flex items-center gap-2">
+            <CalendarIcon className="w-4 h-4 text-rose-400" />
+            <div>
+              <h3 className="text-sm font-bold">Next 6 Predicted Cycles</h3>
+              <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                Future period windows, fertile peaks & ovulation dates
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300">
+            ±{cycleStats.confidenceDays}d window
+          </span>
+        </div>
+
+        {cycleStats.predictedCycles.length <= 1 ? (
+          <p className="text-xs text-zinc-400 py-3 text-center">
+            Log at least one period to project your upcoming 6 cycles.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {cycleStats.predictedCycles.slice(1, 7).map((pc, idx) => (
+              <div
+                key={pc.cycleStart}
+                className={`p-3 rounded-2xl border flex items-center justify-between text-xs ${isDark ? 'bg-zinc-950/60 border-zinc-800/80' : 'bg-rose-50/40 border-rose-100'
+                  }`}
+              >
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                      #{idx + 1}
+                    </span>
+                    <span className="font-bold">
+                      {formatDisplayDate(pc.cycleStart, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {' – '}
+                      {formatDisplayDate(pc.periodEnd, { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    Fertile:{' '}
+                    <span className="text-emerald-400 font-medium">
+                      {formatDisplayDate(pc.fertileStart)} – {formatDisplayDate(pc.fertileEnd)}
+                    </span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] uppercase tracking-wider opacity-60 block">
+                    Ovulation
+                  </span>
+                  <span className="font-bold text-emerald-400">
+                    ✦ {formatDisplayDate(pc.ovulationDate)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* NEW: Phase-by-Phase Symptom & Mood Prediction Matrix */}
+      <div
+        className={`p-4 rounded-3xl border space-y-3 ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+          }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <div>
+              <h3 className="text-sm font-bold">Cycle Phase & Symptom Predictions</h3>
+              <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                What your body typically experiences in each phase based on history
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-2.5">
+          {[
+            {
+              phase: 'Menstrual',
+              days: `Days 1–${cycleStats.expectedPeriodLength}`,
+              accent: 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+            },
+            {
+              phase: 'Follicular',
+              days: `Days ${cycleStats.expectedPeriodLength + 1}–${Math.max(
+                cycleStats.expectedPeriodLength + 1,
+                cycleStats.ovDayInCycle - 3
+              )}`,
+              accent: 'border-violet-500/40 bg-violet-500/10 text-violet-300'
+            },
+            {
+              phase: 'Ovulatory',
+              days: `Days ${cycleStats.ovDayInCycle - 2}–${cycleStats.ovDayInCycle + 1}`,
+              accent: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+            },
+            {
+              phase: 'Luteal',
+              days: `Days ${cycleStats.ovDayInCycle + 2}–${cycleStats.expectedCycleLength}`,
+              accent: 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+            }
+          ].map((pInfo) => {
+            const preds = cycleStats.phaseSymptomForecast[pInfo.phase] || [];
+            const isCurrentPhase = cycleStats.currentPhase === pInfo.phase;
+            return (
+              <div
+                key={pInfo.phase}
+                className={`p-3.5 rounded-2xl border ${isCurrentPhase
+                  ? isDark
+                    ? 'bg-zinc-950 border-rose-500/60 ring-1 ring-rose-500/30'
+                    : 'bg-rose-50/70 border-rose-300'
+                  : isDark
+                    ? 'bg-zinc-950/50 border-zinc-800/80'
+                    : 'bg-zinc-50/60 border-rose-100'
+                  }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${pInfo.accent}`}>
+                      {pInfo.phase} Phase
+                    </span>
+                    {isCurrentPhase && (
+                      <span className="text-[10px] font-bold text-rose-400 uppercase">
+                        • Active Now
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-[11px] font-semibold ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                    {pInfo.days}
+                  </span>
+                </div>
+
+                <p className={`text-[11px] mb-2 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                  {PHASE_DETAILS[pInfo.phase]?.hormones}
+                </p>
+
+                {preds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {preds.map((item) => (
+                      <span
+                        key={`${pInfo.phase}-${item.name}`}
+                        className={`text-[11px] px-2.5 py-1 rounded-xl border font-medium ${isDark
+                          ? 'bg-zinc-900 border-zinc-800 text-zinc-200'
+                          : 'bg-white border-rose-100 text-zinc-800'
+                          }`}
+                      >
+                        {item.type === 'mood' ? '✨' : '⚡'} {item.name}{' '}
+                        <strong className="text-rose-400">{item.probability}%</strong>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-zinc-500 italic">
+                    No recurring symptoms logged for this phase yet.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Cycle History Bar Chart & Multi-Year Timeline */}
+      <div
+        className={`p-4 rounded-3xl border ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+          }`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-bold">Logged Cycle History (All Years)</h3>
           <span className="text-[11px] text-rose-400 font-semibold">
             {cycleStats.cycles.length} Cycles Tracked
           </span>
@@ -2310,11 +2829,11 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp }) {
             Log at least two periods to see cycle length comparisons.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
             {cycleStats.cycles
               .slice()
               .reverse()
-              .map((c, idx) => {
+              .map((c) => {
                 const len = c.cycleLength || cycleStats.currentCycleDay || 1;
                 const widthPct = Math.min(100, Math.round((len / 38) * 100));
                 const periodPct = Math.min(100, Math.round((c.periodLength / len) * 100));
@@ -2493,7 +3012,8 @@ function SettingsVaultView({
   onOpenInstallModal,
   confirmClearModal,
   setConfirmClearModal,
-  onTriggerCareModal
+  onTriggerCareModal,
+  onOpenBatchPastModal
 }) {
   const [newPin, setNewPin] = useState('');
   const fileInputRef = useRef(null);
@@ -2752,13 +3272,39 @@ function SettingsVaultView({
             setSettings((s) => ({
               ...s,
               periodCareMessage:
-                "Dear Nechu, I know you're having a hard time. Hydrate and have your favorite chocolates."
+                "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."
             }));
             showToast("Reset to Nechu's default care message");
           }}
           className="text-[11px] text-amber-400 font-semibold"
         >
           Reset to Default Message for Nechu
+        </button>
+      </div>
+
+      {/* Historical / Previous Year Data Quick Entry Card */}
+      <div
+        className={`p-4 rounded-3xl border space-y-2.5 ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+          }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-violet-400" />
+            <h3 className="text-sm font-bold">Previous Year & Past Cycle History</h3>
+          </div>
+          <span className="text-xs font-bold text-violet-400">
+            {cycleStats.episodes.length} Periods Logged
+          </span>
+        </div>
+        <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+          Add period start dates and typical symptoms from last year or earlier in seconds to train the prediction engine.
+        </p>
+        <button
+          onClick={onOpenBatchPastModal}
+          className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-violet-600 to-rose-500 text-white text-xs font-bold shadow-md flex items-center justify-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Open Past Cycles Batch Manager
         </button>
       </div>
 
@@ -2904,7 +3450,7 @@ function SettingsVaultView({
               <button
                 onClick={() => {
                   setLogs({});
-                  localStorage.removeItem('aura_local_logs_v1');
+                  localStorage.removeItem('aura_local_logs_v2');
                   setConfirmClearModal(false);
                   showToast('All local logs erased. Ready for your own data.');
                 }}
@@ -2921,6 +3467,208 @@ function SettingsVaultView({
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 6. BATCH PAST CYCLES MODAL (Enter Previous Year / Historical Cycles Fast)
+// ============================================================================
+function BatchPastCyclesModal({
+  isDark,
+  settings,
+  cycleStats,
+  onClose,
+  onAddPastPeriod,
+  onDeleteEpisode
+}) {
+  const defaultPastDate = () => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return formatDate(d);
+  };
+
+  const [startDate, setStartDate] = useState(defaultPastDate);
+  const [durationDays, setDurationDays] = useState(settings.manualPeriodLength || 5);
+  const [flowIntensity, setFlowIntensity] = useState('auto');
+  const [selectedSymptoms, setSelectedSymptoms] = useState(['Cramps', 'Fatigue']);
+  const [selectedMoods, setSelectedMoods] = useState(['Sensitive']);
+  const [notes, setNotes] = useState('');
+
+  const toggleItem = (list, setList, item) => {
+    if (list.includes(item)) {
+      setList(list.filter((i) => i !== item));
+    } else {
+      setList([...list, item]);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!startDate) return;
+    onAddPastPeriod({
+      startDate,
+      durationDays,
+      flowIntensity,
+      symptoms: selectedSymptoms,
+      moods: selectedMoods,
+      notes
+    });
+    // Step back ~28 days automatically so the user can rapidly log multiple previous months if desired
+    setStartDate(addDays(startDate, -28));
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div
+        className={`w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl p-5 border shadow-2xl space-y-4 ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-rose-100 text-zinc-900'
+          }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-violet-400" />
+            <div>
+              <h3 className="font-bold text-base">Add Past & Previous Year Cycles</h3>
+              <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                Log historical period start dates & symptoms in one click
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-zinc-800/50">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <div className="grid grid-cols-2 gap-2.5">
+            <div>
+              <label className="block font-semibold mb-1">Period Start Date (Any Year)</label>
+              <input
+                type="date"
+                required
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className={`w-full px-3 py-2 rounded-xl border font-semibold ${isDark
+                  ? 'bg-zinc-950 border-zinc-800 text-zinc-100'
+                  : 'bg-rose-50/50 border-rose-200 text-zinc-900'
+                  }`}
+              />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Duration (Days)</label>
+              <input
+                type="number"
+                min="1"
+                max="12"
+                value={durationDays}
+                onChange={(e) => setDurationDays(Number(e.target.value))}
+                className={`w-full px-3 py-2 rounded-xl border font-semibold ${isDark
+                  ? 'bg-zinc-950 border-zinc-800 text-zinc-100'
+                  : 'bg-rose-50/50 border-rose-200 text-zinc-900'
+                  }`}
+              />
+            </div>
+          </div>
+
+          {/* Quick Year Preset Jumpers */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] opacity-70 mr-1">Quick Jump:</span>
+            {[2025, 2024, 2023].map((yr) => (
+              <button
+                type="button"
+                key={yr}
+                onClick={() => setStartDate(`${yr}-06-15`)}
+                className={`px-2 py-1 rounded-lg border text-[11px] font-semibold ${startDate.startsWith(String(yr))
+                  ? 'bg-violet-500/25 border-violet-400 text-violet-200'
+                  : isDark
+                    ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                    : 'bg-zinc-100 border-zinc-200 text-zinc-700'
+                  }`}
+              >
+                {yr}
+              </button>
+            ))}
+          </div>
+
+          {/* Optional Typical Symptoms during that period */}
+          <div>
+            <label className="block font-semibold mb-1.5">
+              Typical Symptoms on Days 1–2 (trains Symptom Predictor)
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {['Cramps', 'Lower Backache', 'Fatigue', 'Bloating', 'Food Cravings', 'Headache / Migraine'].map(
+                (sym) => {
+                  const active = selectedSymptoms.includes(sym);
+                  return (
+                    <button
+                      type="button"
+                      key={sym}
+                      onClick={() => toggleItem(selectedSymptoms, setSelectedSymptoms, sym)}
+                      className={`px-2.5 py-1 rounded-xl border text-[11px] transition ${active
+                        ? 'bg-rose-500/25 border-rose-400 text-rose-200 font-semibold'
+                        : isDark
+                          ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                          : 'bg-rose-50/40 border-rose-100 text-zinc-600'
+                        }`}
+                    >
+                      {active ? `✓ ${sym}` : sym}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 rounded-2xl bg-gradient-to-r from-violet-600 to-rose-500 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Save Past Period ({formatDisplayDate(startDate, { month: 'short', day: 'numeric', year: 'numeric' })})
+          </button>
+        </form>
+
+        {/* List of All Logged Period Episodes Across All Years */}
+        <div className="pt-3 border-t border-zinc-800/70">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-bold">All Logged Periods ({cycleStats.episodes.length})</h4>
+            <span className="text-[10px] opacity-60">Newest first</span>
+          </div>
+          <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+            {cycleStats.episodes
+              .slice()
+              .reverse()
+              .map((ep) => (
+                <div
+                  key={ep.startDate}
+                  className={`px-3 py-2 rounded-xl border flex items-center justify-between text-xs ${isDark ? 'bg-zinc-950/60 border-zinc-800' : 'bg-rose-50/40 border-rose-100'
+                    }`}
+                >
+                  <div>
+                    <span className="font-bold">
+                      {formatDisplayDate(ep.startDate, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </span>
+                    <span className="text-[11px] opacity-70 ml-2">
+                      ({ep.days.length} days)
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => onDeleteEpisode(ep)}
+                    className="text-red-400 hover:text-red-300 p-1"
+                    title="Delete this period log"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
       </div>
     </div>
   );
