@@ -42,10 +42,121 @@ import {
   HelpCircle
 } from 'lucide-react';
 
+
+// ============================================================================
+// TYPES
+// ============================================================================
+type PhaseName = 'Menstrual' | 'Follicular' | 'Ovulatory' | 'Luteal' | 'Unknown';
+type TabId = 'today' | 'calendar' | 'log' | 'analytics' | 'settings';
+
+interface DayLog {
+  date: string;
+  flow?: string | null;
+  pain?: string;
+  mood?: string[];
+  symptoms?: string[];
+  mucus?: string;
+  water?: number;
+  bbt?: string | null;
+  notes?: string;
+}
+type Logs = Record<string, DayLog>;
+
+interface Settings {
+  calculationMode: 'smart' | 'manual';
+  manualCycleLength: number;
+  manualPeriodLength: number;
+  lutealPhaseLength: number;
+  outlierFilter: boolean;
+  bbtUnit: 'C' | 'F';
+  theme: 'dark' | 'light';
+  pinCode: string | null;
+  userName: string;
+  periodCareMessage: string;
+  customSymptoms: string[];
+  customMoods: string[];
+}
+
+interface Episode { startDate: string; endDate: string; days: string[] }
+interface CycleRecord {
+  startDate: string;
+  endDate: string | null;
+  periodEndDate: string;
+  cycleLength: number | null;
+  periodLength: number;
+  year: number;
+  isOutlier?: boolean;
+  isCurrent?: boolean;
+}
+interface PredictedCycle {
+  cycleIndex: number;
+  cycleStart: string;
+  periodEnd: string;
+  ovulationDate: string;
+  fertileStart: string;
+  fertileEnd: string;
+  nextStart: string;
+}
+interface CalendarMarker {
+  isPredictedPeriod?: boolean;
+  isFertile?: boolean;
+  isOvulation?: boolean;
+  phase?: PhaseName;
+}
+interface SymptomPrediction {
+  name: string;
+  type: string;
+  probability: number;
+  occurrences: number;
+  source: string;
+  phase: PhaseName;
+}
+interface PhaseForecastItem { name: string; type: string; count: number; probability: number }
+interface CycleStats {
+  episodes: Episode[];
+  cycles: CycleRecord[];
+  completedCycles: CycleRecord[];
+  expectedCycleLength: number;
+  expectedPeriodLength: number;
+  lutealLength: number;
+  ovDayInCycle: number;
+  stdDev: string;
+  confidenceDays: number;
+  shortestCycle: number;
+  longestCycle: number;
+  currentCycleDay: number | null;
+  nextPeriodStart: string | null;
+  currentOvulationDate: string | null;
+  fertileWindowStart: string | null;
+  fertileWindowEnd: string | null;
+  daysUntilNextPeriod: number | null;
+  currentPhase: PhaseName;
+  predictedCycles: PredictedCycle[];
+  calendarMarkers: Record<string, CalendarMarker>;
+  latestEpisode: Episode | null;
+  todaySymptomPredictions: SymptomPrediction[];
+  tomorrowSymptomPredictions: SymptomPrediction[];
+  upcomingPmsPredictions: SymptomPrediction[];
+  phaseSymptomForecast: Record<string, PhaseForecastItem[]>;
+  getPhaseForCycleDay: (cd: number, isFlowLogged?: boolean) => PhaseName;
+  predictSymptomsForCycleDay: (cd: number) => SymptomPrediction[];
+}
+type ToastState = { message: string; type: string } | null;
+interface BatchPastInput {
+  startDate: string;
+  durationDays: number;
+  flowIntensity: string;
+  symptoms: string[];
+  moods: string[];
+  notes: string;
+}
+type SetSettings = React.Dispatch<React.SetStateAction<Settings>>;
+type SetLogs = React.Dispatch<React.SetStateAction<Logs>>;
+
 // ============================================================================
 // DATE UTILITY FUNCTIONS (Timezone-safe local YYYY-MM-DD operations)
 // ============================================================================
-const formatDate = (date) => {
+const formatDate = (date: Date | string | number): string => {
   const d = new Date(date);
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -53,25 +164,28 @@ const formatDate = (date) => {
   return `${year}-${month}-${day}`;
 };
 
-const parseDate = (dateStr) => {
+const parseDate = (dateStr?: string | null): Date => {
   if (!dateStr) return new Date();
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d, 12, 0, 0);
 };
 
-const addDays = (dateStr, days) => {
+const addDays = (dateStr: string, days: number): string => {
   const d = parseDate(dateStr);
   d.setDate(d.getDate() + days);
   return formatDate(d);
 };
 
-const diffDays = (dateStr1, dateStr2) => {
+const diffDays = (dateStr1: string, dateStr2: string): number => {
   const d1 = parseDate(dateStr1);
   const d2 = parseDate(dateStr2);
-  return Math.round((d1 - d2) / (1000 * 60 * 60 * 24));
+  return Math.round((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
 };
 
-const formatDisplayDate = (dateStr, options = { month: 'short', day: 'numeric' }) => {
+const formatDisplayDate = (
+  dateStr: string,
+  options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+): string => {
   const d = parseDate(dateStr);
   return d.toLocaleDateString('en-US', options);
 };
@@ -81,12 +195,12 @@ const getTodayStr = () => formatDate(new Date());
 // ============================================================================
 // DEFAULT SAMPLE DATA GENERATOR (Multi-Month & Previous Year History for Demo)
 // ============================================================================
-const generateSampleData = () => {
+const generateSampleData = (): Logs => {
   const today = getTodayStr();
   // Generate 12 realistic cycles spanning ~1 year (including previous year dates)
   // Latest cycle started 10 days ago (currently Cycle Day 11)
   const cycleLengths = [28, 29, 28, 30, 27, 29, 28, 28, 30, 29, 28];
-  const starts = [];
+  const starts: string[] = [];
   let cursor = addDays(today, -10);
   starts.unshift(cursor);
 
@@ -95,7 +209,7 @@ const generateSampleData = () => {
     starts.unshift(cursor);
   }
 
-  const logs = {};
+  const logs: Logs = {};
 
   starts.forEach((start, idx) => {
     const duration = idx % 2 === 0 ? 5 : 4;
@@ -195,7 +309,7 @@ const generateSampleData = () => {
   return logs;
 };
 
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: Settings = {
   calculationMode: 'smart', // 'smart' (Weighted Moving Average) or 'manual'
   manualCycleLength: 28,
   manualPeriodLength: 5,
@@ -239,7 +353,7 @@ const DEFAULT_SETTINGS = {
 // ============================================================================
 // CORE CYCLE, PHASE & SYMPTOM PREDICTION ENGINE
 // ============================================================================
-function analyzeCycleData(logs, settings) {
+function analyzeCycleData(logs: Logs, settings: Settings): CycleStats {
   const today = getTodayStr();
 
   // 1. Find all dates with actual period flow (excluding 'spotting' unless part of period)
@@ -251,7 +365,7 @@ function analyzeCycleData(logs, settings) {
     .sort();
 
   // Group consecutive/near-consecutive period dates (gap <= 2 days) into distinct period episodes
-  const episodes = [];
+  const episodes: Episode[] = [];
   periodDates.forEach((date) => {
     if (episodes.length === 0) {
       episodes.push({ startDate: date, endDate: date, days: [date] });
@@ -268,7 +382,7 @@ function analyzeCycleData(logs, settings) {
   });
 
   // 2. Calculate historical cycles from episodes (including previous years)
-  const cycles = [];
+  const cycles: CycleRecord[] = [];
   for (let i = 0; i < episodes.length; i++) {
     const current = episodes[i];
     const next = episodes[i + 1];
@@ -298,7 +412,7 @@ function analyzeCycleData(logs, settings) {
   }
 
   // 3. Calculate Predicted Cycle Length & Period Duration using Weighted Moving Average
-  const completedCycles = cycles.filter((c) => c.cycleLength !== null);
+  const completedCycles = cycles.filter((c): c is CycleRecord & { cycleLength: number } => c.cycleLength !== null);
   const validCycles = settings.outlierFilter
     ? completedCycles.filter((c) => !c.isOutlier)
     : completedCycles;
@@ -349,7 +463,7 @@ function analyzeCycleData(logs, settings) {
   const latestEpisode = episodes.length > 0 ? episodes[episodes.length - 1] : null;
 
   // Helper to determine phase for any cycle day (1 .. expectedCycleLength)
-  const getPhaseForCycleDay = (cd, isFlowLogged = false) => {
+  const getPhaseForCycleDay = (cd: number, isFlowLogged = false): PhaseName => {
     if (isFlowLogged || (cd >= 1 && cd <= expectedPeriodLength)) return 'Menstrual';
     if (cd >= ovDayInCycle - 2 && cd <= ovDayInCycle + 1) return 'Ovulatory';
     if (cd > expectedPeriodLength && cd < ovDayInCycle - 2) return 'Follicular';
@@ -358,14 +472,14 @@ function analyzeCycleData(logs, settings) {
   };
 
   // 4. Current Cycle State & Future Projections (Next 6 cycles)
-  const predictedCycles = [];
-  let currentCycleDay = null;
-  let nextPeriodStart = null;
-  let currentOvulationDate = null;
-  let fertileWindowStart = null;
-  let fertileWindowEnd = null;
-  let daysUntilNextPeriod = null;
-  let currentPhase = 'Unknown';
+  const predictedCycles: PredictedCycle[] = [];
+  let currentCycleDay: number | null = null;
+  let nextPeriodStart: string | null = null;
+  let currentOvulationDate: string | null = null;
+  let fertileWindowStart: string | null = null;
+  let fertileWindowEnd: string | null = null;
+  let daysUntilNextPeriod: number | null = null;
+  let currentPhase: PhaseName = 'Unknown';
 
   if (latestEpisode) {
     currentCycleDay = diffDays(today, latestEpisode.startDate) + 1;
@@ -407,7 +521,7 @@ function analyzeCycleData(logs, settings) {
   }
 
   // 5. Build Lookup Sets for Fast Calendar Rendering (Past + Future 6 Cycles)
-  const calendarMarkers = {};
+  const calendarMarkers: Record<string, CalendarMarker> = {};
   predictedCycles.forEach((pc, idx) => {
     if (idx >= 1) {
       for (let i = 0; i < expectedPeriodLength; i++) {
@@ -428,7 +542,7 @@ function analyzeCycleData(logs, settings) {
 
   // 6. SYMPTOM & MOOD PATTERN PREDICTION ENGINE
   // Map every historical log to its Cycle Day (CD) and Phase to compute probabilities
-  const phaseOccurrences = {
+  const phaseOccurrences: Record<string, { totalDays: number; items: Record<string, number> }> = {
     Menstrual: { totalDays: 0, items: {} },
     Follicular: { totalDays: 0, items: {} },
     Ovulatory: { totalDays: 0, items: {} },
@@ -436,7 +550,10 @@ function analyzeCycleData(logs, settings) {
   };
 
   // Also track by 3-day sliding Cycle Day window (CD - 1, CD, CD + 1) across completed/active cycles
-  const cycleDayWindowCounts = {}; // dayNum -> { cyclesObserved: Set, itemCounts: { [name]: Set(cycleIdx) } }
+  const cycleDayWindowCounts: Record<
+    number,
+    { cyclesSeen: Set<number>; tags: Record<string, Set<number>> }
+  > = {}; // dayNum -> { cyclesObserved: Set, itemCounts: { [name]: Set(cycleIdx) } }
   const totalCyclesWithLogs = Math.max(1, cycles.length);
 
   cycles.forEach((cyc, cIdx) => {
@@ -449,7 +566,7 @@ function analyzeCycleData(logs, settings) {
       if (!entry) continue;
 
       const cd = offset + 1;
-      let phaseName = 'Follicular';
+      let phaseName: PhaseName = 'Follicular';
       if (offset < cyc.periodLength || (entry.flow && entry.flow !== 'none')) {
         phaseName = 'Menstrual';
       } else if (cd >= cOvDay - 2 && cd <= cOvDay + 1) {
@@ -493,14 +610,14 @@ function analyzeCycleData(logs, settings) {
   });
 
   // Helper to predict likely symptoms & moods for any Cycle Day
-  const predictSymptomsForCycleDay = (targetCd) => {
+  const predictSymptomsForCycleDay = (targetCd: number): SymptomPrediction[] => {
     if (!targetCd) return [];
     const normalizedCd = ((targetCd - 1) % expectedCycleLength) + 1;
     const phaseName = getPhaseForCycleDay(normalizedCd);
     const windowData = cycleDayWindowCounts[normalizedCd];
     const phaseData = phaseOccurrences[phaseName] || { totalDays: 0, items: {} };
 
-    const scores = {};
+    const scores: Record<string, { prob: number; count: number; source: string }> = {};
 
     // Combine exact Cycle-Day window probability with Phase-level baseline probability
     if (windowData && windowData.cyclesSeen.size > 0) {
@@ -542,7 +659,7 @@ function analyzeCycleData(logs, settings) {
   };
 
   // Build Phase-by-Phase Symptom & Mood Forecast Matrix
-  const phaseSymptomForecast = {};
+  const phaseSymptomForecast: Record<string, PhaseForecastItem[]> = {};
   ['Menstrual', 'Follicular', 'Ovulatory', 'Luteal'].forEach((pName) => {
     const pData = phaseOccurrences[pName];
     const denom = Math.max(1, pData.totalDays);
@@ -565,7 +682,7 @@ function analyzeCycleData(logs, settings) {
   const upcomingPmsPredictions = predictSymptomsForCycleDay(Math.max(1, expectedCycleLength - 2));
 
   // 7. Summary Statistics
-  const lengths = validCycles.map((c) => c.cycleLength);
+  const lengths = validCycles.map((c) => c.cycleLength as number);
   const shortestCycle = lengths.length ? Math.min(...lengths) : expectedCycleLength;
   const longestCycle = lengths.length ? Math.max(...lengths) : expectedCycleLength;
   const confidenceDays = Math.max(1, Math.min(5, Math.round(stdDev)));
@@ -604,7 +721,10 @@ function analyzeCycleData(logs, settings) {
 // ============================================================================
 // PHASE METADATA & PHYSIOLOGICAL INSIGHTS
 // ============================================================================
-const PHASE_DETAILS = {
+const PHASE_DETAILS: Record<PhaseName, {
+  name: string; color: string; badgeBg: string; accent: string;
+  energy: string; hormones: string; insight: string; fertility: string;
+}> = {
   Menstrual: {
     name: 'Menstrual Phase',
     color: 'from-rose-500 to-pink-600',
@@ -667,7 +787,7 @@ const PHASE_DETAILS = {
 // ============================================================================
 export default function App() {
   // --- Persistent State in localStorage (v2 key with fresh multi-month/year demo data) ---
-  const [logs, setLogs] = useState(() => {
+  const [logs, setLogs] = useState < Logs > (() => {
     try {
       const saved = localStorage.getItem('aura_local_logs_v2');
       if (saved) return JSON.parse(saved);
@@ -679,7 +799,7 @@ export default function App() {
     return sample;
   });
 
-  const [settings, setSettings] = useState(() => {
+  const [settings, setSettings] = useState < Settings > (() => {
     try {
       const saved = localStorage.getItem('aura_local_settings_v2');
       if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
@@ -707,7 +827,7 @@ export default function App() {
   }, [settings]);
 
   // --- Navigation & UI State ---
-  const [activeTab, setActiveTab] = useState('today'); // 'today', 'calendar', 'log', 'analytics', 'settings'
+  const [activeTab, setActiveTab] = useState < TabId > ('today');
   const [selectedDate, setSelectedDate] = useState(getTodayStr());
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const d = new Date();
@@ -716,13 +836,13 @@ export default function App() {
   const [isLocked, setIsLocked] = useState(() => Boolean(settings.pinCode));
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState < ToastState > (null);
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [confirmClearModal, setConfirmClearModal] = useState(false);
   const [showCarePopup, setShowCarePopup] = useState(false);
   const [showBatchPastModal, setShowBatchPastModal] = useState(false);
 
-  const showToast = (message, type = 'success') => {
+  const showToast = (message: string, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3200);
   };
@@ -731,8 +851,8 @@ export default function App() {
   const cycleStats = useMemo(() => analyzeCycleData(logs, settings), [logs, settings]);
 
   // --- Quick Period Toggle for Selected Date ---
-  const handleQuickLogPeriod = (dateStr = getTodayStr()) => {
-    const existing = logs[dateStr] || { date: dateStr };
+  const handleQuickLogPeriod = (dateStr: string = getTodayStr()) => {
+    const existing: DayLog = logs[dateStr] || { date: dateStr };
     const hasFlow = existing.flow && existing.flow !== 'none';
 
     if (hasFlow) {
@@ -748,7 +868,14 @@ export default function App() {
   };
 
   // --- Batch Add Past Period Cycle (Supports Previous Years + Optional Typical Symptoms) ---
-  const handleBatchAddPastPeriod = ({ startDate, durationDays, flowIntensity, symptoms, moods, notes }) => {
+  const handleBatchAddPastPeriod = ({
+    startDate,
+    durationDays,
+    flowIntensity,
+    symptoms,
+    moods,
+    notes
+  }: BatchPastInput) => {
     if (!startDate) return;
     const dur = Math.max(1, Math.min(12, Number(durationDays) || 5));
     const defaultFlows = ['medium', 'heavy', 'medium', 'light', 'spotting'];
@@ -785,7 +912,7 @@ export default function App() {
   };
 
   // --- Delete an Entire Logged Period Episode ---
-  const handleDeleteEpisode = (episode) => {
+  const handleDeleteEpisode = (episode: Episode) => {
     if (!episode || !episode.days) return;
     setLogs((prev) => {
       const next = { ...prev };
@@ -800,7 +927,7 @@ export default function App() {
   };
 
   // --- Update Single Day Log ---
-  const updateDayLog = (dateStr, partialLog) => {
+  const updateDayLog = (dateStr: string, partialLog: Partial<DayLog>) => {
     const existingFlow = logs[dateStr]?.flow;
     const isNewPeriodFlow =
       partialLog.flow &&
@@ -819,9 +946,9 @@ export default function App() {
   };
 
   // --- Temperature Converter Helper ---
-  const displayTemp = (celsiusStr) => {
+  const displayTemp = (celsiusStr?: string | number | null): string => {
     if (!celsiusStr) return '';
-    const c = parseFloat(celsiusStr);
+    const c = typeof celsiusStr === 'number' ? celsiusStr : parseFloat(celsiusStr);
     if (isNaN(c)) return '';
     if (settings.bbtUnit === 'F') {
       return ((c * 9) / 5 + 32).toFixed(2);
@@ -830,7 +957,7 @@ export default function App() {
   };
 
   // --- PIN Lock Screen ---
-  const handlePinKeyPress = (digit) => {
+  const handlePinKeyPress = (digit: string) => {
     if (pinInput.length < 4) {
       const next = pinInput + digit;
       setPinInput(next);
@@ -1191,7 +1318,7 @@ export default function App() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => setActiveTab(item.id as TabId)}
                   className="flex flex-col items-center justify-center py-1 rounded-2xl transition-all group"
                 >
                   <div
@@ -1276,6 +1403,16 @@ export default function App() {
   );
 }
 
+
+interface CommonProps {
+  isDark: boolean;
+  logs: Logs;
+  settings: Settings;
+  cycleStats: CycleStats;
+  displayTemp: (v?: string | number | null) => string;
+  onOpenBatchPastModal: () => void;
+}
+
 // ============================================================================
 // 1. DASHBOARD (TODAY) VIEW
 // ============================================================================
@@ -1292,6 +1429,13 @@ function DashboardView({
   onTriggerCareModal,
   onOpenBatchPastModal,
   onNavigateAnalytics
+}: CommonProps & {
+  selectedDate: string;
+  setSelectedDate: (d: string) => void;
+  onOpenLogger: (d: string) => void;
+  onQuickLogPeriod: (d?: string) => void;
+  onTriggerCareModal: () => void;
+  onNavigateAnalytics: () => void;
 }) {
   const today = getTodayStr();
   const todayLog = logs[today] || {};
@@ -1312,8 +1456,8 @@ function DashboardView({
   const radius = center - strokeWidth - 6;
 
   // Helper to convert cycle day (1..cycleLen) to angle in degrees (top = -90deg)
-  const dayToAngle = (day) => ((day - 1) / cycleLen) * 360 - 90;
-  const polarToCartesian = (cx, cy, r, angleDeg) => {
+  const dayToAngle = (day: number): number => ((day - 1) / cycleLen) * 360 - 90;
+  const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
     const rad = (angleDeg * Math.PI) / 180;
     return {
       x: cx + r * Math.cos(rad),
@@ -1322,7 +1466,7 @@ function DashboardView({
   };
 
   // Create SVG arc path between startDay and endDay
-  const createArc = (startDay, endDay) => {
+  const createArc = (startDay: number, endDay: number): string => {
     const startAngle = dayToAngle(startDay);
     const endAngle = dayToAngle(endDay + 0.85);
     const start = polarToCartesian(center, center, radius, endAngle);
@@ -1498,7 +1642,7 @@ function DashboardView({
             >
               {cycleStats.daysUntilNextPeriod !== null && cycleStats.daysUntilNextPeriod >= 0
                 ? 'Next Period In'
-                : cycleStats.daysUntilNextPeriod < 0
+                : (cycleStats.daysUntilNextPeriod ?? 0) < 0
                   ? 'Period Late By'
                   : 'Start Tracking'}
             </span>
@@ -1617,7 +1761,7 @@ function DashboardView({
           </div>
           <p className="text-sm font-bold">
             {cycleStats.fertileWindowStart
-              ? `${formatDisplayDate(cycleStats.fertileWindowStart, { month: 'short', day: 'numeric' })}–${formatDisplayDate(cycleStats.fertileWindowEnd, { day: 'numeric' })}`
+              ? `${formatDisplayDate(cycleStats.fertileWindowStart, { month: 'short', day: 'numeric' })}–${formatDisplayDate(cycleStats.fertileWindowEnd as string, { day: 'numeric' })}`
               : '—'}
           </p>
           <p className={`text-[10px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-zinc-500'}`}>
@@ -1833,6 +1977,112 @@ function DashboardView({
   );
 }
 
+
+// ============================================================================
+// HORMONE CURVE CHART (illustrative estrogen / progesterone / LH curves)
+// ============================================================================
+function HormoneCurveChart({
+  cycleLen,
+  ovDay,
+  currentDay,
+  isDark
+}: {
+  cycleLen: number;
+  ovDay: number;
+  currentDay: number;
+  isDark: boolean;
+}) {
+  const width = 320;
+  const height = 120;
+  const padX = 12;
+  const padTop = 10;
+  const padBottom = 18;
+  const plotH = height - padTop - padBottom;
+  const plotW = width - padX * 2;
+
+  const gauss = (x: number, mu: number, sigma: number) =>
+    Math.exp(-Math.pow(x - mu, 2) / (2 * sigma * sigma));
+
+  // Normalized 0..1 illustrative curves
+  const estrogen = (d: number) =>
+    0.12 + 0.88 * gauss(d, ovDay - 1, 2.6) + 0.35 * gauss(d, ovDay + 7, 3.5);
+  const progesterone = (d: number) =>
+    0.04 + 0.9 * gauss(d, ovDay + 7, Math.max(2.8, (cycleLen - ovDay) / 3.2));
+  const lh = (d: number) => 0.05 + 0.95 * gauss(d, ovDay - 0.5, 0.9);
+
+  const xOf = (d: number) => padX + ((d - 1) / Math.max(1, cycleLen - 1)) * plotW;
+  const yOf = (v: number) => padTop + (1 - Math.min(1, v)) * plotH;
+
+  const buildPath = (fn: (d: number) => number) => {
+    const pts: string[] = [];
+    for (let d = 1; d <= cycleLen; d += 0.5) {
+      pts.push(`${xOf(d).toFixed(1)},${yOf(fn(d)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  };
+
+  const day = Math.min(Math.max(currentDay, 1), cycleLen);
+  const grid = isDark ? '#27272a' : '#ffe4e6';
+  const label = isDark ? '#a1a1aa' : '#71717a';
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-32 overflow-visible">
+        <line x1={padX} y1={height - padBottom} x2={width - padX} y2={height - padBottom} stroke={grid} strokeWidth="1" />
+
+        {/* Ovulation marker */}
+        <line
+          x1={xOf(ovDay)}
+          y1={padTop}
+          x2={xOf(ovDay)}
+          y2={height - padBottom}
+          stroke="#10b981"
+          strokeWidth="1"
+          strokeDasharray="3 3"
+          opacity="0.6"
+        />
+        <text x={xOf(ovDay)} y={padTop + 8} fontSize="8" textAnchor="middle" fill="#10b981">
+          Ovulation
+        </text>
+
+        <polyline fill="none" stroke="#f43f5e" strokeWidth="2" points={buildPath(estrogen)} />
+        <polyline fill="none" stroke="#f59e0b" strokeWidth="2" points={buildPath(progesterone)} />
+        <polyline fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeDasharray="2 2" points={buildPath(lh)} />
+
+        {/* Today marker */}
+        <line
+          x1={xOf(day)}
+          y1={padTop}
+          x2={xOf(day)}
+          y2={height - padBottom}
+          stroke={isDark ? '#fafafa' : '#18181b'}
+          strokeWidth="1.5"
+          opacity="0.75"
+        />
+        <circle cx={xOf(day)} cy={yOf(Math.max(estrogen(day), progesterone(day)))} r="4" fill={isDark ? '#fafafa' : '#18181b'} />
+
+        <text x={padX} y={height - 4} fontSize="8" fill={label}>Day 1</text>
+        <text x={width - padX} y={height - 4} fontSize="8" textAnchor="end" fill={label}>Day {cycleLen}</text>
+      </svg>
+
+      <div className="flex items-center justify-center gap-4 text-[10px] mt-1">
+        <span className="flex items-center gap-1" style={{ color: label }}>
+          <span className="w-3 h-0.5 bg-rose-500 inline-block" /> Estrogen
+        </span>
+        <span className="flex items-center gap-1" style={{ color: label }}>
+          <span className="w-3 h-0.5 bg-amber-500 inline-block" /> Progesterone
+        </span>
+        <span className="flex items-center gap-1" style={{ color: label }}>
+          <span className="w-3 h-0.5 bg-violet-500 inline-block" /> LH
+        </span>
+      </div>
+      <p className="text-[10px] mt-1 text-center" style={{ color: label }}>
+        Illustrative curves based on your predicted ovulation day, not a lab measurement.
+      </p>
+    </div>
+  );
+}
+
 // ============================================================================
 // 2. INTERACTIVE MULTI-YEAR CALENDAR VIEW (Supports Previous Year & Future Predictions)
 // ============================================================================
@@ -1849,6 +2099,13 @@ function CalendarView({
   onQuickLogPeriod,
   displayTemp,
   onOpenBatchPastModal
+}: CommonProps & {
+  calendarMonth: Date;
+  setCalendarMonth: (d: Date) => void;
+  selectedDate: string;
+  setSelectedDate: (d: string) => void;
+  onOpenLogger: (d: string) => void;
+  onQuickLogPeriod: (d?: string) => void;
 }) {
   const today = getTodayStr();
   const currentActualYear = new Date().getFullYear();
@@ -2247,6 +2504,17 @@ function LoggerView({
   showToast,
   cycleStats,
   onOpenBatchPastModal
+}: {
+  isDark: boolean;
+  logs: Logs;
+  settings: Settings;
+  setSettings: SetSettings;
+  selectedDate: string;
+  setSelectedDate: (d: string) => void;
+  updateDayLog: (d: string, p: Partial<DayLog>) => void;
+  showToast: (m: string, t?: string) => void;
+  cycleStats: CycleStats;
+  onOpenBatchPastModal: () => void;
 }) {
   const currentLog = logs[selectedDate] || { date: selectedDate };
   const [newCustomSymptom, setNewCustomSymptom] = useState('');
@@ -2270,14 +2538,14 @@ function LoggerView({
     }
   }, [selectedDate, logs, settings.bbtUnit]);
 
-  const toggleArrayItem = (field, item) => {
+  const toggleArrayItem = (field: 'symptoms' | 'mood', item: string) => {
     const currentArr = currentLog[field] || [];
     const exists = currentArr.includes(item);
     const updated = exists ? currentArr.filter((i) => i !== item) : [...currentArr, item];
     updateDayLog(selectedDate, { [field]: updated });
   };
 
-  const handleSaveBbt = (val) => {
+  const handleSaveBbt = (val: string) => {
     setBbtInput(val);
     const num = parseFloat(val);
     if (!val || isNaN(num)) {
@@ -2290,7 +2558,7 @@ function LoggerView({
     }
   };
 
-  const handleAddCustomSymptom = (e) => {
+  const handleAddCustomSymptom = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = newCustomSymptom.trim();
     if (!trimmed) return;
@@ -2445,7 +2713,61 @@ function LoggerView({
         </div>
       </div>
 
-      {/* 3. Basal Body Temperature (BBT) & Cervical Fluid */}
+      {/* 3a. Basal Body Temperature & Cervical Fluid */}
+      <div
+        className={`p-4 rounded-3xl border space-y-4 ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
+          }`}
+      >
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Thermometer className="w-4 h-4 text-amber-400" />
+            <h3 className="text-sm font-bold">Basal Body Temperature (°{settings.bbtUnit})</h3>
+          </div>
+          <input
+            type="number"
+            step="0.01"
+            inputMode="decimal"
+            placeholder={settings.bbtUnit === 'F' ? 'e.g. 97.80' : 'e.g. 36.55'}
+            value={bbtInput}
+            onChange={(e) => handleSaveBbt(e.target.value)}
+            className={`w-full px-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 ${isDark
+              ? 'bg-zinc-950 border-zinc-800 text-zinc-100'
+              : 'bg-rose-50/40 border-rose-200 text-zinc-900'
+              }`}
+          />
+          <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
+            Take it first thing in the morning, before getting out of bed.
+          </p>
+        </div>
+
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Droplets className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-sm font-bold">Cervical Fluid</h3>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {mucusTypes.map((m) => {
+              const active = (currentLog.mucus || 'none') === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => updateDayLog(selectedDate, { mucus: m.id })}
+                  className={`px-3 py-1.5 rounded-2xl text-xs font-medium border transition ${active
+                    ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400 font-semibold'
+                    : isDark
+                      ? 'bg-zinc-950/60 border-zinc-800 text-zinc-300'
+                      : 'bg-rose-50/40 border-rose-100 text-zinc-700'
+                    }`}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* 3b. Symptoms */}
       <div
         className={`p-4 rounded-3xl border ${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-rose-100 shadow-sm'
           }`}
@@ -2556,10 +2878,17 @@ function LoggerView({
 // ============================================================================
 // 4. ANALYTICS, FUTURE PHASE/CYCLE PREDICTIONS & SYMPTOM FORECAST VIEW
 // ============================================================================
-function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp, onOpenBatchPastModal }) {
+function AnalyticsView({
+  isDark,
+  logs,
+  settings,
+  cycleStats,
+  displayTemp,
+  onOpenBatchPastModal
+}: CommonProps) {
   // Compute overall symptom frequency
   const symptomStats = useMemo(() => {
-    const counts = {};
+    const counts: Record<string, number> = {};
     Object.values(logs).forEach((entry) => {
       (entry.symptoms || []).forEach((s) => {
         counts[s] = (counts[s] || 0) + 1;
@@ -2783,7 +3112,7 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp, onOpen
                 </div>
 
                 <p className={`text-[11px] mb-2 ${isDark ? 'text-zinc-400' : 'text-zinc-600'}`}>
-                  {PHASE_DETAILS[pInfo.phase]?.hormones}
+                  {PHASE_DETAILS[pInfo.phase as PhaseName]?.hormones}
                 </p>
 
                 {preds.length > 0 ? (
@@ -2938,7 +3267,16 @@ function AnalyticsView({ isDark, logs, settings, cycleStats, displayTemp, onOpen
   );
 }
 
-function BbtTrendChart({ bbtSeries, cycleLen, unit, isDark }) {
+function BbtTrendChart({
+  bbtSeries,
+  cycleLen,
+  isDark
+}: {
+  bbtSeries: { cycleDay: number; date: string; tempC: number; displayVal: number }[];
+  cycleLen: number;
+  unit?: string;
+  isDark: boolean;
+}) {
   const width = 320;
   const height = 110;
   const minC = 36.0;
@@ -3014,9 +3352,22 @@ function SettingsVaultView({
   setConfirmClearModal,
   onTriggerCareModal,
   onOpenBatchPastModal
+}: {
+  isDark: boolean;
+  logs: Logs;
+  setLogs: SetLogs;
+  settings: Settings;
+  setSettings: SetSettings;
+  cycleStats: CycleStats;
+  showToast: (m: string, t?: string) => void;
+  onOpenInstallModal: () => void;
+  confirmClearModal: boolean;
+  setConfirmClearModal: (v: boolean) => void;
+  onTriggerCareModal: () => void;
+  onOpenBatchPastModal: () => void;
 }) {
   const [newPin, setNewPin] = useState('');
-  const fileInputRef = useRef(null);
+  const fileInputRef = useRef < HTMLInputElement > (null);
 
   // Export Full JSON Backup
   const handleExportJSON = () => {
@@ -3066,13 +3417,13 @@ function SettingsVaultView({
   };
 
   // Import JSON Backup
-  const handleImportJSON = (e) => {
+  const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target.result);
+        const parsed = JSON.parse(event.target?.result as string);
         if (parsed.logs && typeof parsed.logs === 'object') {
           setLogs(parsed.logs);
           if (parsed.settings) {
@@ -3089,7 +3440,7 @@ function SettingsVaultView({
     reader.readAsText(file);
   };
 
-  const handleSavePin = (e) => {
+  const handleSavePin = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPin.length === 4 && /^\d{4}$/.test(newPin)) {
       setSettings((s) => ({ ...s, pinCode: newPin }));
@@ -3132,7 +3483,7 @@ function SettingsVaultView({
           >
             <p className="text-xs font-bold">Smart Weighted Avg</p>
             <p className="text-[10px] opacity-80 mt-0.5">
-              Adapts automatically to your last 6 logged cycles
+              Adapts automatically to your last 12 logged cycles
             </p>
           </button>
 
@@ -3216,7 +3567,7 @@ function SettingsVaultView({
           <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50">
             <span className="text-xs font-medium">Basal Temperature Unit</span>
             <div className="flex rounded-xl overflow-hidden border border-zinc-700">
-              {['C', 'F'].map((u) => (
+              {(['C', 'F'] as const).map((u) => (
                 <button
                   key={u}
                   onClick={() => setSettings((s) => ({ ...s, bbtUnit: u }))}
@@ -3482,6 +3833,13 @@ function BatchPastCyclesModal({
   onClose,
   onAddPastPeriod,
   onDeleteEpisode
+}: {
+  isDark: boolean;
+  settings: Settings;
+  cycleStats: CycleStats;
+  onClose: () => void;
+  onAddPastPeriod: (p: BatchPastInput) => void;
+  onDeleteEpisode: (e: Episode) => void;
 }) {
   const defaultPastDate = () => {
     const d = new Date();
@@ -3496,7 +3854,7 @@ function BatchPastCyclesModal({
   const [selectedMoods, setSelectedMoods] = useState(['Sensitive']);
   const [notes, setNotes] = useState('');
 
-  const toggleItem = (list, setList, item) => {
+  const toggleItem = (list: string[], setList: (l: string[]) => void, item: string) => {
     if (list.includes(item)) {
       setList(list.filter((i) => i !== item));
     } else {
@@ -3504,7 +3862,7 @@ function BatchPastCyclesModal({
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!startDate) return;
     onAddPastPeriod({
@@ -3575,7 +3933,7 @@ function BatchPastCyclesModal({
           {/* Quick Year Preset Jumpers */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[10px] opacity-70 mr-1">Quick Jump:</span>
-            {[2025, 2024, 2023].map((yr) => (
+            {[new Date().getFullYear() - 1, new Date().getFullYear() - 2, new Date().getFullYear() - 3].map((yr) => (
               <button
                 type="button"
                 key={yr}
