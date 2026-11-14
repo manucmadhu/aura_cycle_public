@@ -2,7 +2,30 @@
 
 > **Privacy-First, Zero-Cloud Menstrual Cycle & Fertility Intelligence**
 
+<div align="center">
+
+[![Download Android APK](https://img.shields.io/badge/Download_APK-Android-f43f5e?style=for-the-badge&logo=android&logoColor=white)](https://github.com/manucmadhu/aura_cycle_public/raw/main/app-debug.apk)
+[![GitHub Releases](https://img.shields.io/badge/Releases-v1.0.0-8b5cf6?style=for-the-badge&logo=github)](https://github.com/manucmadhu/aura_cycle_public/releases)
+[![100% On-Device](https://img.shields.io/badge/Privacy-100%25_On--Device-0284c7?style=for-the-badge&logo=shieldcheck)](README.md#-privacy--security-philosophy)
+[![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=for-the-badge)](LICENSE)
+
+</div>
+
 AuraCycle is an open-source, air-gapped reproductive health tracker built with a strict **Zero-Server, Zero-Cloud** architecture. All cycle data, symptom logs, Basal Body Temperature (BBT) records, and fertility projections remain 100% on your device—never sent to any external server, analytics service, or third party.
+
+---
+
+## 📲 Download & Install on Android
+
+Get the pre-built, ready-to-run Android package directly from the repository:
+
+👉 **[Direct Download: AuraCycle APK (`app-debug.apk`)](https://github.com/manucmadhu/aura_cycle_public/raw/main/app-debug.apk)**
+
+### Quick Android Install Steps:
+1. Tap the download link above on your Android phone (or download on PC and transfer to phone).
+2. When prompted by your browser, tap **Download anyway** and then **Open**.
+3. If Android displays *"For your security, your phone is not allowed to install unknown apps from this source"*, tap **Settings** and toggle **"Allow from this source"**.
+4. Tap **Install** and enjoy a completely private, offline cycle tracking experience.
 
 ---
 
@@ -60,7 +83,7 @@ Ensure you have [Node.js](https://nodejs.org/) (v18 or higher) and `npm` install
 
 ### Installation
 
-1. Clone or navigate to the repository directory:
+1. Navigate to the project directory:
    ```bash
    cd aura_cycle
    ```
@@ -92,7 +115,10 @@ Ensure you have [Node.js](https://nodejs.org/) (v18 or higher) and `npm` install
 
 AuraCycle is fully configured to run natively on Android devices using Capacitor.
 
-### Building for Android
+### Pre-built APK
+A pre-compiled debug APK is available in the repository root: [`app-debug.apk`](file:///c:/Users/MANU/Downloads/aura_cycle/aura_cycle/app-debug.apk). You can download and install it directly onto any Android device.
+
+### Building from Source
 
 1. Build the web distribution:
    ```bash
@@ -114,7 +140,7 @@ AuraCycle is fully configured to run natively on Android devices using Capacitor
    cd android
    ./gradlew assembleDebug
    ```
-   The APK will be located at `android/app/build/outputs/apk/debug/app-debug.apk`.
+   The APK will be generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ### PWA / Browser Installation (No Android Studio Required)
 
@@ -138,6 +164,7 @@ aura_cycle/
 │   ├── App.jsx                # Main application, state management & views
 │   ├── index.css              # Global styles & Tailwind directives
 │   └── main.jsx               # React DOM entry point
+├── app-debug.apk              # Ready-to-install Android APK
 ├── capacitor.config.json      # Capacitor configuration
 ├── package.json               # Project scripts and dependencies
 ├── tailwind.config.js         # Tailwind configuration
