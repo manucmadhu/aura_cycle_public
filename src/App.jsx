@@ -148,6 +148,14 @@ const generateSampleData = () => {
   });
   return logs;
 };
+const getDefaultCareMessage = (name) => {
+  const trimmed = name?.trim();
+  if (trimmed) {
+    return `Dear ${trimmed}, I know you're having a hard time. Hydrate and have your favorite chocolates.`;
+  }
+  return "I know you're having a hard time. Hydrate and have your favorite chocolates.";
+};
+
 const DEFAULT_SETTINGS = {
   calculationMode: "smart",
   // 'smart' (Weighted Moving Average) or 'manual'
@@ -163,8 +171,9 @@ const DEFAULT_SETTINGS = {
   // 'dark' or 'light'
   pinCode: null,
   // null or 4-digit string
-  userName: "Nechu",
-  periodCareMessage: "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates.",
+  userName: "",
+  hasCompletedOnboarding: false,
+  periodCareMessage: "",
   customSymptoms: [
     "Cramps",
     "Lower Backache",
@@ -538,18 +547,16 @@ const PHASE_DETAILS = {
 function App() {
   const [logs, setLogs] = useState(() => {
     try {
-      const saved = localStorage.getItem("aura_local_logs_v2");
+      const saved = localStorage.getItem("aura_local_logs_v3");
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.error("Failed to read localStorage logs:", e);
     }
-    const sample = generateSampleData();
-    localStorage.setItem("aura_local_logs_v2", JSON.stringify(sample));
-    return sample;
+    return {};
   });
   const [settings, setSettings] = useState(() => {
     try {
-      const saved = localStorage.getItem("aura_local_settings_v2");
+      const saved = localStorage.getItem("aura_local_settings_v3");
       if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) };
     } catch (e) {
       console.error("Failed to read localStorage settings:", e);
@@ -558,14 +565,14 @@ function App() {
   });
   useEffect(() => {
     try {
-      localStorage.setItem("aura_local_logs_v2", JSON.stringify(logs));
+      localStorage.setItem("aura_local_logs_v3", JSON.stringify(logs));
     } catch (e) {
       console.error("Storage quota error:", e);
     }
   }, [logs]);
   useEffect(() => {
     try {
-      localStorage.setItem("aura_local_settings_v2", JSON.stringify(settings));
+      localStorage.setItem("aura_local_settings_v3", JSON.stringify(settings));
     } catch (e) {
       console.error("Storage settings error:", e);
     }
@@ -584,6 +591,40 @@ function App() {
   const [confirmClearModal, setConfirmClearModal] = useState(false);
   const [showCarePopup, setShowCarePopup] = useState(false);
   const [showBatchPastModal, setShowBatchPastModal] = useState(false);
+  const [showOnboardingModal, setShowOnboardingModal] = useState(
+    () => !settings.hasCompletedOnboarding && !settings.userName
+  );
+  const [tempName, setTempName] = useState(settings.userName || "");
+
+  const activeCareMessage = settings.periodCareMessage?.trim() || getDefaultCareMessage(settings.userName);
+
+  const handleFinishOnboarding = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanName = tempName.trim();
+    setSettings((s) => ({
+      ...s,
+      userName: cleanName,
+      periodCareMessage: getDefaultCareMessage(cleanName),
+      hasCompletedOnboarding: true
+    }));
+    setShowOnboardingModal(false);
+    if (cleanName) {
+      showToast(`Welcome, ${cleanName}!`);
+    } else {
+      showToast("Welcome to AuraCycle!");
+    }
+  };
+
+  const handleSkipOnboarding = () => {
+    setSettings((s) => ({
+      ...s,
+      userName: "",
+      periodCareMessage: getDefaultCareMessage(""),
+      hasCompletedOnboarding: true
+    }));
+    setShowOnboardingModal(false);
+  };
+
   const showToast = (message, type = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3200);
@@ -780,7 +821,7 @@ function App() {
           <button
             onClick={() => setShowCarePopup(true)}
             className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition flex items-center gap-1 ${isDark ? "bg-rose-950/50 border-rose-500/40 text-rose-200 hover:bg-rose-900/60" : "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100"}`}
-            title="Open Nechu's Comfort Care Note"
+            title={settings.userName ? `Open ${settings.userName}'s Comfort Care Note` : "Open Comfort Care Note"}
           >
             <span>🍫</span>
             <span className="hidden sm:inline">Care Note</span>
@@ -910,7 +951,7 @@ function App() {
       />}
 
       {
-        /* Special Period Care Modal for Nechu */
+        /* Period Comfort Care Modal */
       }
       {showCarePopup && <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
         <div
@@ -942,7 +983,7 @@ function App() {
               className={`text-base font-bold leading-relaxed ${isDark ? "text-rose-100" : "text-rose-950"}`}
             >
               "
-              {settings.periodCareMessage || "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."}
+              {activeCareMessage}
               "
             </p>
             <p
@@ -957,8 +998,69 @@ function App() {
             className="mt-5 w-full py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-600 to-amber-600 text-white font-bold text-xs shadow-lg shadow-rose-500/25 flex items-center justify-center gap-2"
           >
             <Heart className="w-4 h-4 fill-white" />
-            Thank You • I'll Hydrate & Have Chocolates
+            Thank You • I'll Hydrate & Rest Well
           </button>
+        </div>
+      </div>}
+
+      {
+        /* Initial User Name Setup / Welcome Modal */
+      }
+      {showOnboardingModal && <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+        <div
+          className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl relative overflow-hidden ${isDark ? "bg-[#18141d] border-rose-500/30 text-zinc-100" : "bg-white border-rose-200 text-zinc-900"}`}
+        >
+          <div className="w-36 h-36 rounded-full bg-rose-500/15 blur-3xl absolute -top-10 -right-10 pointer-events-none" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-rose-500/25">
+            <Droplets className="w-7 h-7 text-white fill-white/20" />
+          </div>
+          <h2 className="text-xl font-bold text-center tracking-tight">Welcome to AuraCycle</h2>
+          <p className={`text-xs text-center mt-1 mb-4 leading-relaxed ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+            Your private, 100% on-device cycle & fertility companion. No accounts, zero cloud servers, pure privacy.
+          </p>
+
+          <form onSubmit={handleFinishOnboarding} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5">What should we call you?</label>
+              <input
+                type="text"
+                autoFocus
+                placeholder="Enter your name (e.g. Maya)..."
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500 ${isDark ? "bg-zinc-950 border-zinc-800 text-zinc-100" : "bg-rose-50/50 border-rose-200 text-zinc-900"}`}
+              />
+              <p className={`text-[11px] mt-1 ${isDark ? "text-zinc-500" : "text-zinc-400"}`}>
+                Used to personalize your comfort care notes and dashboard.
+              </p>
+            </div>
+
+            <div className={`p-3 rounded-2xl border text-xs ${isDark ? "bg-rose-950/30 border-rose-500/20 text-rose-200" : "bg-rose-50 border-rose-200 text-rose-900"}`}>
+              <div className="flex items-center gap-1.5 font-bold mb-1 text-[11px]">
+                <Heart className="w-3.5 h-3.5 fill-current text-rose-400" />
+                <span>Personalized Care Note Preview:</span>
+              </div>
+              <p className="italic">
+                "{getDefaultCareMessage(tempName)}"
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <button
+                type="submit"
+                className="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-pink-600 to-purple-600 text-white font-bold text-xs shadow-lg shadow-rose-500/25 active:scale-98 transition"
+              >
+                Get Started
+              </button>
+              <button
+                type="button"
+                onClick={handleSkipOnboarding}
+                className={`w-full py-2 text-xs font-medium text-center transition ${isDark ? "text-zinc-400 hover:text-zinc-200" : "text-zinc-500 hover:text-zinc-700"}`}
+              >
+                Skip for now
+              </button>
+            </div>
+          </form>
         </div>
       </div>}
 
@@ -1107,7 +1209,7 @@ function DashboardView({
         {!isPeriodLoggedToday && cycleStats.currentPhase !== "Menstrual" && <button
           onClick={() => setPreviewCareCard((p) => !p)}
           className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border transition ${previewCareCard ? "bg-amber-500/20 text-amber-300 border-amber-500/40" : isDark ? "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-rose-300" : "bg-rose-50 text-rose-700 border-rose-200"}`}
-          title="Preview Nechu's Period Care Card"
+          title="Preview Period Care Card"
         >
           🍫 {previewCareCard ? "Hide Care" : "Preview Care"}
         </button>}
@@ -1118,7 +1220,7 @@ function DashboardView({
     </div>
 
     {
-      /* Special Comfort Care Banner for Nechu when Period Hits */
+      /* Period Comfort Care Banner */
     }
     {isPeriodActive && <div
       onClick={onTriggerCareModal}
@@ -1143,7 +1245,7 @@ function DashboardView({
             className={`text-sm font-bold leading-snug mt-2 ${isDark ? "text-rose-100" : "text-rose-950"}`}
           >
             "
-            {settings.periodCareMessage || "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."}
+            {settings.periodCareMessage?.trim() || getDefaultCareMessage(settings.userName)}
             "
           </p>
           <div className="flex items-center gap-3 mt-2.5 text-[11px] font-medium opacity-85">
@@ -2831,6 +2933,42 @@ function SettingsVaultView({
     </div>
 
     {
+      /* User Profile & Name Customization */
+    }
+    <div
+      className={`p-4 rounded-3xl border space-y-3 ${isDark ? "bg-zinc-900/80 border-zinc-800" : "bg-white border-rose-100 shadow-sm"}`}
+    >
+      <div className="flex items-center gap-2">
+        <Smile className="w-4 h-4 text-rose-400" />
+        <h3 className="text-sm font-bold">Your Profile</h3>
+      </div>
+      <p className={`text-xs ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
+        Your name is kept strictly on-device to personalize your dashboard and period comfort notes.
+      </p>
+      <div>
+        <label className="block text-[11px] font-semibold mb-1 opacity-70">Your Name</label>
+        <input
+          type="text"
+          placeholder="Enter your name (e.g. Maya)..."
+          value={settings.userName || ""}
+          onChange={(e) => {
+            const newName = e.target.value;
+            setSettings((s) => {
+              const prevDefault = getDefaultCareMessage(s.userName);
+              const isUsingDefault = !s.periodCareMessage || s.periodCareMessage === prevDefault;
+              return {
+                ...s,
+                userName: newName,
+                periodCareMessage: isUsingDefault ? getDefaultCareMessage(newName) : s.periodCareMessage
+              };
+            });
+          }}
+          className={`w-full px-3.5 py-2 rounded-xl border text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500 ${isDark ? "bg-zinc-950 border-zinc-800 text-zinc-100" : "bg-rose-50/40 border-rose-200 text-zinc-900"}`}
+        />
+      </div>
+    </div>
+
+    {
       /* Personalized Period Care Message Settings */
     }
     <div
@@ -2839,7 +2977,9 @@ function SettingsVaultView({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Heart className="w-4 h-4 text-rose-400 fill-rose-400/20" />
-          <h3 className="text-sm font-bold">Period Comfort Message for Nechu</h3>
+          <h3 className="text-sm font-bold">
+            Period Comfort Message{settings.userName ? ` for ${settings.userName}` : ""}
+          </h3>
         </div>
         <button
           onClick={onTriggerCareModal}
@@ -2849,25 +2989,26 @@ function SettingsVaultView({
         </button>
       </div>
       <p className={`text-xs ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>
-        Automatically displays on the dashboard when her period hits and pops up whenever a period day is logged.
+        Automatically displays on the dashboard when your period hits and pops up whenever a period day is logged.
       </p>
       <textarea
         rows={2}
-        value={settings.periodCareMessage ?? "Dear Nechu, I know you're having a hard time. Hydrate and have your favorite chocolates."}
+        value={settings.periodCareMessage || getDefaultCareMessage(settings.userName)}
         onChange={(e) => setSettings((s) => ({ ...s, periodCareMessage: e.target.value }))}
         className={`w-full p-3 rounded-2xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-rose-500 ${isDark ? "bg-zinc-950 border-zinc-800 text-zinc-100" : "bg-rose-50/40 border-rose-200 text-zinc-900"}`}
       />
       <button
         onClick={() => {
+          const defMsg = getDefaultCareMessage(settings.userName);
           setSettings((s) => ({
             ...s,
-            periodCareMessage: "Dear Nechu I know you're having a hard time. Hydrate and have your favorite chocolates."
+            periodCareMessage: defMsg
           }));
-          showToast("Reset to Nechu's default care message");
+          showToast("Reset to default care message");
         }}
         className="text-[11px] text-amber-400 font-semibold"
       >
-        Reset to Default Message for Nechu
+        Reset to Default Message{settings.userName ? ` for ${settings.userName}` : ""}
       </button>
     </div>
 
@@ -2989,12 +3130,12 @@ function SettingsVaultView({
           onClick={() => {
             const sample = generateSampleData();
             setLogs(sample);
-            showToast("Reloaded sample 5-cycle history");
+            showToast("Loaded sample test cycles");
           }}
           className={`py-2.5 px-3 rounded-2xl border text-xs font-semibold flex items-center justify-center gap-2 ${isDark ? "bg-zinc-950 border-zinc-800 text-zinc-200 hover:bg-zinc-800" : "bg-rose-50 border-rose-200 text-rose-900"}`}
         >
           <RefreshCw className="w-4 h-4 text-amber-400" />
-          Load Demo Data
+          Load Sample Data
         </button>
       </div>
 
@@ -3026,6 +3167,7 @@ function SettingsVaultView({
           <button
             onClick={() => {
               setLogs({});
+              localStorage.removeItem("aura_local_logs_v3");
               localStorage.removeItem("aura_local_logs_v2");
               setConfirmClearModal(false);
               showToast("All local logs erased. Ready for your own data.");
