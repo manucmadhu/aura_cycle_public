@@ -84,7 +84,7 @@ const generateSampleData = () => {
         mucus: "none",
         water: 8,
         bbt: (36.24 + Math.random() * 0.14).toFixed(2),
-        notes: i === 0 ? "Cycle started. Had warm water and dark chocolate." : ""
+        notes: i === 0 ? "Cycle started. Hydrate yourself." : ""
       };
     }
     for (let dayOffset = duration; dayOffset < cLen; dayOffset++) {
@@ -151,9 +151,9 @@ const generateSampleData = () => {
 const getDefaultCareMessage = (name) => {
   const trimmed = name?.trim();
   if (trimmed) {
-    return `Dear ${trimmed}, I know you're having a hard time. Hydrate and have your favorite chocolates.`;
+    return `Dear ${trimmed}, We know you're having a hard time. Hydrate yourself and take care.`;
   }
-  return "I know you're having a hard time. Hydrate and have your favorite chocolates.";
+  return "Take rest and stay hydrated";
 };
 
 const DEFAULT_SETTINGS = {
